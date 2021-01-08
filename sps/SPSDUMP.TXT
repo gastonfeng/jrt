@@ -1,0 +1,79 @@
+SPSTALK DATA DUMP FILE
+  
+Date recorded  22-8-1996    Time  23: 5
+  
+CURRENT STATE DATA
+Regulator state                           0
+Battery Voltage                    	 41.7 V 
+Charge Current                     	  0.0 A 
+Load Current                        	  0.0 A 
+Battery Voltage Maximum                  47.6 V
+Battery Voltage Minimum                  41.6 V
+Charge Amp hours                          0   Ah
+Discharge Amp hours                       0   Ah
+Controller type:         48V   50/100A
+ 
+PAST PERFORMANCE
+Day              Vmin    Vmax Charge Ah Discharge Ah
+1                13.0    14.0      90      50
+2		 12.9	 15.1	  276	   40
+3		 12.5	 15.4	  210	   57
+4		 12.4	 15.3	  306	   70
+5		 12.5	 14.7	  266	  128
+6		 12.2	 15.3	  256	   79
+7		 12.2	 15.0	  220	   77
+8		 12.0	 15.0	  266	   68
+9		 11.9	 14.8	  180	   72
+10		 11.7	 14.4	  110	   92
+11		 12.4	 14.4	  130	   97
+12		 12.2	 14.8	  190	  115
+13		 12.2	 15.1	  296	   67
+14		 11.9	 15.3	  180	   85
+15		 13.0	 14.0	   50	   49
+16		 13.0	 14.0	   80	   30
+17		 13.0	 14.0	   90	   20
+18		 12.9	 15.1	  276	   40
+19		 12.5	 15.4	  210	   57
+20		 12.4	 15.3	  306	  100
+21		 12.2	 15.1	  296	   67
+22		 12.2	 15.3	  276	   79
+23		 12.0	 15.0	  220	   69
+24		 12.0	 15.0	  266	   68
+25		 11.6	 14.8	  180	   72
+26		 11.7	 14.4	   72	   90
+27		 11.5	 14.3	   70	   87
+28		 12.4	 15.3	  306	   93
+29		 12.2	 15.1	  296	   67
+30		 11.9	 15.3	  276	   85
+31		 12.0	 15.0	  220	   69
+32		 13.0	 14.0	   80	   55
+  
+SETTINGS
+  
+CONTROL SETTINGS
+Boost Maxiumum Voltage             	 60.0	   V
+Boost Taper Voltage                      56.0      V
+Number of Banks                           4
+Float Maximum Voltage                	 56.0	   V
+Float Minimum Voltage                 	 54.0	   V
+Boost Cut In Voltage                     49.6      V
+Temperature Comp Per Cell               - 0      mV/øC
+State Change Delay                        2.0      min
+Display Temperature Setting               0        øC
+Display Contrast Setting                 17
+Low Battery Alarm On At              	 44.8	   V
+Load Reconnect Voltage               	 51.2	   V
+Delay Before Load Disconnect             200      sec
+High Battery Alarm On At             	 64.0	   V
+Communication Baud Rate            	2400	 Baud
+  
+CALIBRATION SETTINGS
+                                       Gain   Offset
+Display Temperature                     80      82
+Battery Temperature                     80      81
+Bank A                               	80	85
+Bank C                               	80	86
+Load Voltage                    	8A	81
+Load Current                    	80	80
+Charge Current                          80      80
+Battery Voltage                         80      86

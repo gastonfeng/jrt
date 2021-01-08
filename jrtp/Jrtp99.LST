@@ -1,0 +1,2286 @@
+####################################################################################################
+#                                                                                                  #
+#       Archimedes 8051 C-Compiler V4.05A/DXT                              16/Feb/100  18:01:26     #
+#                                                                                                  #
+#           Memory model  =  small                                                                 #
+#           Source file   =  jrtp99.c                                                              #
+#           List file     =  jrtp99.lst                                                            #
+#           Object file   =  jrtp99.r03                                                            #
+#           Command line  =  jrtp99 -ms -L -I\c-51\include\ -xDFT2                                 #
+#                                                                                                  #
+#                                                                   (c) Copyright Archimedes 1991  #
+####################################################################################################
+
+      1            /*==========================*/
+      2            /*  JRTZ.C                  */
+      3            /*  1997.6.1                */
+      4            /*  1998年5月增加打印功能   */
+      5            /*  更名为JRTP.C            */
+      6            /*==========================*/
+      7            
+      8            /*==============*/
+      9            /*  包含头文件  */
+     10            /*==============*/
+     11            #include <io52.h>
+     12            #include <stdarg.h>
+     13            #include "jrtp99.h"
+     14            
+     15            /*==============*/
+     16            /*  系统宏定义  */
+     17            /*==============*/
+     18            #define FREQ    11.0592
+     19            #define DELAY_SCALE 115 /*1000/(12/FREQ)*/
+     20            #define TIMEBASE    50     /*  定时中断时间,单位ms */
+     21            #define T0_INIT     19457   /*0xffff-(TIMEBASE*1000)/(12/FREQ)  */
+     22            #define WAITTIME 10
+     23            #define COMP_ZERO   200
+     24            
+     25            /*==================*/
+     26            /*  系统变量定义    */
+     27            /*==================*/
+     28            
+     29            unsigned char load,solar_state;
+     30            unsigned char Delay_change,Delay_disconnect;
+     31            unsigned char sec,time,min,hour;
+     32            unsigned char port,sr_out,load_out,local;
+     33            unsigned char buf[4];               /*  接收缓冲区，这是一个先进先出对列  */
+     34            unsigned char bufin,bufout;
+     35            unsigned long chargeah,dischargeah;
+     36            bit up_load,up;
+     37            bit OutDevice;
+     38            bit newday;
+     39            /*==================*/
+     40            /*  输入输出口定义  */
+     41            /*==================*/
+     42            bit out_en=0xb6;
+     43            bit port_out_en=0xa5,sr_out_en=0xa6,load_out_en=0xa7;
+     44            bit wdg=0xb4;
+     45            bit RS=0xa0,rw=0xa1,e=0xa2;
+     46            bit clk=0x96,cs=0x97,di=0x95,Do=0x94;
+     47            bit sk=0xb7,dout=0xb5,cs0=0xb2;
+     48            bit stb=0xa3;
+     49            bit usy=0xa4;
+     50            
+     51            bit IsSolar;
+     52            bit TEST;
+     53            /*bit out_en=0xce;
+     54            bit port_out_en=0xdd,sr_out_en=0xde,load_out_en=0xdf;
+     55            bit wdg=0xcc;
+     56            bit RS=0xd8,rw=0xd9,e=0xda;
+     57            bit clk=0x96,cs=0x97,di=0x95,Do=0x94;
+     58            bit sk=0xcf,dout=0xcd,cs0=0xca;
+     59            bit stb=0xdb;
+     60            bit usy=0xdc;
+     61            */
+     62            /*======================*/
+     63            /*      函数预说明      */
+     64            /*======================*/
+     65            lcd_init(void);
+     66            monitor aprintf(char *format,...);
+     67            delay(unsigned int times);
+     68            monitor set_eprom(unsigned char command);
+     69            monitor unsigned int eprom(unsigned char address);
+     70            unsigned char wait_key();
+     71            monitor write_eprom(unsigned char address,unsigned int Data);
+     72            sendstr(unsigned char *Data);
+     73            unsigned char key();
+     74            
+     75            /*==============*/
+     76            /*  系统初始化  */
+     77            /*==============*/
+     78            init()
+     79            {
+     80                unsigned char i;
+     81                out_en=0;
+     82                P0=sr_out=load_out=0;
+     83                load_out_en=0;
+     84                sr_out_en=0;
+     85                port=P0=LAMP;
+     86                port_out_en=1;
+     87                port_out_en=0;
+     88                load=0;
+     89                write_eprom(BT_V_MIN,1024);
+     90                /*  LCD显*/
+     91                OutDevice=LCD;
+     92                lcd_init();
+     93                /*  系统状态判别    */
+     94            #if MODEL==70    
+     95                aprintf("\a   JRT-48-100");
+     96            #endif
+     97            #if MODEL==71
+     98                aprintf("\a   JRT-24-100");
+     99            #endif
+    100                /*  定时器0初始化    */
+    101                arg();                                
+    102                IE=0x82;
+    103                SCON=0x70;
+    104                TMOD=0x21;
+    105                TH1=0xfd;
+    106                PCON=0;
+    107                TR0=ES=TR1=EA=1;
+    108                delay(2000);
+    109                local=eprom(LOCAL);
+    110                sendstr("AT&FE0V0X0S0=1\r");
+    111                bufin=bufout=0;
+    112                if(eprom(SYSTEM_FLAG)!=MODEL){
+    113                    aprintf("\aDATA ERROR!\nLoad Default.");
+    114                    wait_key();
+    115                    write_eprom(BOOST,BOOST_DEFAULT_VALUE);
+    116                    write_eprom(TAPER,TAPER_DEFAULT_VALUE);
+    117                    write_eprom(FLOAT_MAX_S,FLOAT_MAX_DEFAULT_VALUE);
+    118                    write_eprom(FLOAT_MIN_S,FLOAT_MIN_DEFAULT_VALUE);
+    119                    write_eprom(DELAY_CHANGE,DELAY_CHANGE_DEFAULT_VALUE);
+    120                    write_eprom(BOOST_BELOW,BOOST_BELOW_DEFAULT_VALUE);
+    121                    write_eprom(COMP_TEMP,COMP_TEMP_DEFAULT_VALUE);
+    122                    write_eprom(BT_MIN,BT_MIN_DEFAULT_VALUE);
+    123                    write_eprom(BT_MAX,BT_MAX_DEFAULT_VALUE);
+    124                    write_eprom(BT_RELOAD,BT_RELOAD_DEFAULT_VALUE);
+    125                    write_eprom(DELAY_DISCONNECT,DELAY_DISCONNECT_DEFAULT_VALUE);
+    126                    for(i=DATA_INDEX;i<DATA+4*32;i++)write_eprom(i,0);
+    127                    for(i=PASSWORD;i<PASSWORD+8;i++)write_eprom(i,'8');
+    128                    for(i=PHONE;i<PHONE+12;i++)write_eprom(i,'*');
+    129                    for(i=CLIP;i<CLIP+16;i++)write_eprom(i,128);
+    130                    arg();
+    131                    write_eprom(SYSTEM_FLAG,MODEL);
+    132                }
+    133            }
+    134            
+    135            
+    136            arg(){
+    137                if(eprom(DAY)>=400)while(1){
+    138                    lcd_init();
+    139                    aprintf("ERROR 601");
+    140                }
+    141                write_eprom(1,eprom(TAPER));
+    142                write_eprom(2,(eprom(TAPER)*4+eprom(BOOST))/5);
+    143                write_eprom(3,(eprom(TAPER)*3+eprom(BOOST)*2)/5);
+    144                write_eprom(4,(eprom(TAPER)*2+eprom(BOOST)*3)/5);
+    145                write_eprom(5,(eprom(TAPER)+eprom(BOOST)*4)/5);
+    146                write_eprom(6,eprom(BOOST));
+    147            }
+    148            
+    149            monitor int ad(unsigned char ch)
+    150            {
+    151                union{
+    152                    unsigned char i;
+    153                    unsigned long l;
+    154                }a;
+    155                unsigned int result;
+    156                port=((port&0xf0)|ch);
+    157                P0=port;
+    158                port_out_en=1;
+    159                port_out_en=0;
+    160                for(a.i=0;a.i<255;a.i++);
+    161                sk=0;
+    162                dout=1;
+    163                result=0;
+    164                cs0=0;
+    165                while(!dout);
+    166                sk=1;
+    167                sk=0;
+    168                sk=1;
+    169                result|=dout;
+    170                sk=0;
+    171                for(a.i=0;a.i<11;a.i++){
+    172                    sk=1;
+    173                    result=(result<<1)|dout;
+    174                    sk=0;
+    175                }
+    176                a.l=128+eprom(CLIP+ch);
+    177                a.l=result*a.l;
+    178                result=a.l/1024;
+    179                sk=dout=cs0=1;
+    180                return result;
+    181            }
+    182                    /*
+    183            monitor ad_get(unsigned char ch)
+    184            {
+    185                    if(ch==LOAD_V)return ad_get(BT_V)-ad(ch);
+    186                    if(ch==TEMP_BT)return (ad(ch)*4-2732-COMP_ZERO);
+    187                    if(ch==BT_V)return ad(ch)-(eprom(COMP_TEMP)*(MODEL==71?12:24)*ad_get(TEMP_BT));
+    188                    if(ch==LOAD_I)return ad(ch)/2;
+    189                    if(ch==BT_I)return ad(ch);
+    190                    if(ch==SR_I0)sr_out=1;ch=BT_I;
+    191                    if(ch==SR_I1)sr_out=2;ch=BT_I;
+    192                    if(ch==SR_I2)sr_out=4;ch=BT_I;
+    193                    if(ch==SR_I3)sr_out=8;ch=BT_I;
+    194                    if(ch==SR_I4)sr_out=0x10;ch=BT_I;
+    195                    if(ch==SR_I5)sr_out=0x20;ch=BT_I;
+    196                if(load!=0)sr_out|=LOAD;else sr_out&=~LOAD;
+    197                P0=sr_out;
+    198                sr_out_en=1;
+    199                sr_out_en=0;
+    200                return ad(ch);
+    201            }       */
+    202            monitor ad_get(unsigned char ch)
+    203            {
+    204                switch(ch){
+    205                    case LOAD_V:return ad_get(BT_V)-ad(ch);
+    206                    case TEMP_BT:return (ad(ch)*4-2732-COMP_ZERO)/10;
+    207                    case BT_V:return ad(ch);
+    208                    case LOAD_I:return ad(ch)/2;                                             
+    209                    case BT_I:return ad(ch);
+    210                    case SR_I0:sr_out=~1;ch=BT_I;break;
+    211                    case SR_I1:sr_out=~2;ch=BT_I;break;
+    212                    case SR_I2:sr_out=~4;ch=BT_I;break;
+    213                    case SR_I3:sr_out=~8;ch=BT_I;break;
+    214                    case SR_I4:sr_out=~0x10;ch=BT_I;break;
+    215                    case SR_I5:sr_out=~0x20;ch=BT_I;break;
+    216                    default:return 0;
+    217                }
+    218                if(load!=0)sr_out|=LOAD;else sr_out&=~LOAD;
+    219                P0=sr_out;
+    220                sr_out_en=1;
+    221                sr_out_en=0;
+    222                return ad(ch);
+    223            }
+    224            
+    225            interrupt [0x0b] void T0_int (void)
+    226            {
+    227                static unsigned char ms;
+    228                static unsigned char next_state;
+    229                unsigned int value;
+    230            
+    231                /*定时器初值设置*/
+    232                TH0=T0_INIT/256;
+    233                TL0=T0_INIT%256;
+    234            
+    235                /*50mS加一*/
+    236                if((ms++)==(1000/TIMEBASE-1)){
+    237            
+    238                    /*看门狗复位*/
+    239                    wdg=~wdg;
+    240                    /*1秒*/
+    241                    ms=0;
+    242            
+    243                    /*充电流程控制*/
+    244                    value=ad_get(BT_V)-(eprom(COMP_TEMP)*(MODEL==71?12:24)*ad_get(TEMP_BT))/100;
+    245                    if(solar_state<7){
+    246                        if(value<eprom(solar_state-1)){
+    247                            if(next_state==solar_state-1){
+    248                                if(Delay_change==0)solar_state-=1;
+    249                            }
+    250                            else{
+    251                                next_state=solar_state-1;
+    252                                Delay_change=TEST?2:eprom(DELAY_CHANGE);
+    253                            }
+    254                        }
+    255                        else {
+    256                            if(value>=eprom(solar_state)){
+    257                                if(next_state==solar_state+1){
+    258                                    if(Delay_change==0)solar_state+=1;
+    259                                }
+    260                                else{
+    261                                    next_state=solar_state+1;
+    262                                    Delay_change=TEST?2:eprom(DELAY_CHANGE);
+    263                                }
+    264                            }
+    265                            else next_state=0;
+    266                        }
+    267                    }
+    268                    else{
+    269                        if(value<(solar_state==13?eprom(BOOST_BELOW):eprom(FLOAT_MIN_S))){
+    270                            if(next_state==solar_state+1){
+    271                                if(Delay_change==0)solar_state=solar_state==13?1:solar_state+1;
+    272                            }
+    273                            else{
+    274                                next_state=solar_state+1;
+    275                                Delay_change=TEST?2:eprom(DELAY_CHANGE);
+    276                            }
+    277                        }
+    278                        else {
+    279                            if(value>eprom(FLOAT_MAX_S) && solar_state!=7){
+    280                                if(next_state==solar_state-1){
+    281                                    if(Delay_change==0)solar_state-=1;
+    282                                }
+    283                                else{
+    284                                    next_state=solar_state-1;
+    285                                    Delay_change=TEST?2:eprom(DELAY_CHANGE);
+    286                                }
+    287                            }
+    288                            else next_state=0;
+    289                        }
+    290                    }
+    291                    if(value>eprom(DATA))write_eprom(DATA,value);
+    292                    if(value<eprom(DATA+1))write_eprom(DATA+1,value);
+    293                    chargeah+=ad_get(BT_I);
+    294                    dischargeah+=ad_get(LOAD_I);
+    295                    write_eprom(DATA+2,chargeah/36000);
+    296                    write_eprom(DATA+3,dischargeah/36000);
+    297            
+    298                    if(!load){
+    299                        if(value>eprom(BT_MAX)){
+    300                            if(Delay_disconnect==0){
+    301                                load_out|=(ALARM_HI|LOAD_DISABLE|UJ);
+    302                                load=1;
+    303                            }
+    304                        }
+    305                        else{
+    306                            if(value<eprom(BT_MIN)){
+    307                                if(Delay_disconnect==0){
+    308                                    load_out|=(ALARM_LO|LOAD_DISABLE|UJ);
+    309                                    load=2;
+    310                                }
+    311                            }
+    312                            else{
+    313                                Delay_disconnect=TEST?2:eprom(DELAY_DISCONNECT);
+    314                            }
+    315                        }
+    316                    }
+    317                    else{
+    318                        if(load==1){
+    319                            if(value<eprom(BT_MAX)-40){
+    320                                load_out&=~(ALARM_HI|LOAD_DISABLE|UJ);
+    321                                load=0;
+    322                            }
+    323                        }
+    324                        else{
+    325                            if(value>eprom(BT_RELOAD)){
+    326                                load_out&=~(ALARM_LO|LOAD_DISABLE|UJ);
+    327                                load=0;
+    328                            }
+    329                        }
+    330                    }
+    331                    Delay_change--;
+    332                    Delay_disconnect--;
+    333            
+    334                    if((sec++)==59){
+    335                        sec=0;
+    336                        time++;
+    337                        if((min++)==59){
+    338                            min=0;
+    339                            if((hour++)==23)newday=1;
+    340            
+    341                        }
+    342                    }
+    343                }
+    344                value=P0;
+    345            
+    346                P0=load_out;
+    347                load_out_en=1;
+    348                load_out_en=0;
+    349                switch(solar_state){
+    350                    case 1:
+    351                    case 13:sr_out=0;break;
+    352                    case 2:
+    353                    case 12:sr_out=0x20;break;
+    354                    case 3:
+    355                    case 11:sr_out=0x30;break;
+    356                    case 4:
+    357                    case 10:sr_out=0x38;break;
+    358                    case 5:
+    359                    case 9:sr_out=0x3c;break;
+    360                    case 6:
+    361                    case 8:sr_out=0x3e;break;
+    362                    case 7:sr_out=0x3f;break;
+    363                    default:solar_state=1;
+    364                }
+    365                if(load!=0)sr_out|=LOAD;else sr_out&=~LOAD;
+    366                if(!IsSolar){
+    367                    P0=sr_out;
+    368                    sr_out_en=1;
+    369                    sr_out_en=0;
+    370                }
+    371                P0=value;
+    372            }
+    373            
+    374            DELAY()
+    375            {
+    376                clk=1;
+    377                clk=0;
+    378            }
+    379              
+    380            /*----------------------*/
+    381            /*  EPROM设置及擦除程序 */
+    382            /*  command=00H,EWDS  */
+    383            /*  command=01H,EWEN  */
+    384            /*----------------------*/
+    385            monitor set_eprom(unsigned char command)
+    386            {
+    387                unsigned char k;
+    388                cs=clk=di=0;
+    389                Do=1;
+    390                cs=1;
+    391                while(!Do);
+    392                di=1;
+    393                DELAY();
+    394                if(command==0){
+    395                        di=0;
+    396                        DELAY();
+    397                        DELAY();
+    398                    }
+    399                    else{
+    400                        di=0;
+    401                        DELAY();
+    402                        DELAY();
+    403                        command=0xc0;
+    404                    }
+    405                for(k=0;k<8;k++){
+    406                    di=command>>7;
+    407                    DELAY();
+    408                    command<<=1;
+    409                }
+    410                cs=0;
+    411            }
+    412            
+    413            /*--------------------------*/
+    414            /*  EPROM写入程序           */
+    415            /*  address<256,写单个数据  */
+    416            /*--------------------------*/
+    417            monitor write_eprom(unsigned char address,unsigned int Data)
+    418            {
+    419                unsigned char k;
+    420                set_eprom(EWEN);
+    421                cs=clk=di=0;
+    422                Do=1;
+    423                cs=1;
+    424                while(!Do);
+    425                di=1;
+    426                DELAY();
+    427                di=0;
+    428                DELAY();
+    429                        di=1;
+    430                DELAY();
+    431                for(k=0;k<8;k++){
+    432                    di=address>>7;
+    433                    DELAY();
+    434                    address<<=1;
+    435                }
+    436                for(k=0;k<16;k++){
+    437                    di=Data>>15;
+    438                    DELAY();
+    439                    Data<<=1;
+    440                }
+    441                cs=0;
+    442                set_eprom(EWDS);
+    443            }
+    444            
+    445            /*------------------*/
+    446            /*  EPROM读出程序   */
+    447            /*------------------*/
+    448            monitor unsigned int eprom(unsigned char address)
+    449            {
+    450                unsigned char k,i;
+    451                unsigned int result;
+    452                for(i=0;i<10;i++){
+    453                    cs=clk=di=0;
+    454                    Do=1;
+    455                    cs=1;
+    456                    while(!Do);
+    457                    cs=0;
+    458                    cs=1;
+    459                    di=1;
+    460                    DELAY();
+    461                    DELAY();
+    462                    di=0;
+    463                    DELAY();
+    464                    for(k=0;k<8;k++){
+    465                        di=address>>7;
+    466                        DELAY();
+    467                        address<<=1;
+    468                    }
+    469                    if(Do==0)goto GOOD;
+    470                }
+    471                return 0;
+    472            GOOD:
+    473                for(k=0;k<16;k++){
+    474                    result<<=1;
+    475                    DELAY();
+    476                    result=result|Do;
+    477                }
+    478                cs=0;
+    479                return result;
+    480            }
+    481            
+    482            /*----------------------*/
+    483            /*  液晶显示驱动程序    */
+    484            /*  型号:   MDLS-16265B */
+    485            /*----------------------*/
+    486            /*----------------------*/
+    487            /*  液晶显示器判忙程序  */
+    488            /*----------------------*/
+    489            
+    490            monitor unsigned char busy()
+    491            {
+    492                unsigned char ac;
+    493                P0=0xff;
+    494                RS=0;
+    495                rw=1;
+    496                e=1;
+    497                ac=P0;
+    498                e=0;
+    499                return ac>>7;
+    500            }
+    501            
+    502            monitor lcd_opr(unsigned char ch)
+    503            {
+    504                while(busy());
+    505                RS=rw=0;
+    506                P0=ch;
+    507                e=1;
+    508                e=0;
+    509            }
+    510            
+    511            /*--------------------------*/
+    512            /*  液晶显示器初始化程序    */
+    513            /*--------------------------*/
+    514            lcd_init(void)
+    515            {
+    516                /*  工作方式设置,8位数据接口,两行显示,5X7点阵   */
+    517                lcd_opr(0x38);
+    518                /*  输入方式选择,AC自动加1,画面不动 */
+    519                lcd_opr(6);
+    520                /*  显示开关控制,开显示,关光标,禁止闪烁 */
+    521                lcd_opr(12);
+    522                lcd_opr(1);
+    523            }
+    524            
+    525            
+    526            /*------------------------------*/
+    527            /*  单字符显示,供printf()调用   */
+    528            /*------------------------------*/
+    529            monitor aputchar(unsigned char c)
+    530            {
+    531                if(OutDevice==LCD){
+    532                    while(busy());
+    533                    RS=rw=0;
+    534                    switch(c){
+    535                        case '\n':P0=0xc0;break;
+    536                        case '\b':P0=2;break;
+    537                        case '\a':P0=1;break;
+    538                        default:RS=1;P0=c;
+    539                    }
+    540                    e=1;
+    541                    e=0;
+    542                }
+    543                else{
+    544                   while(usy){
+    545                        OutDevice=LCD;
+    546                        aprintf("\aPRINTER NOT\n READY...");
+    547                        if(key()==CANCEL)return 1;
+    548                        OutDevice=PRINTER;
+    549                    }
+    550                   P0=c;
+    551                   stb=0;
+    552                   stb=1;
+    553                   if(c=='\n')aputchar('\r');
+    554                }
+    555                return 0;
+    556            }
+    557            
+    558            /*------------------*/
+    559            /*  格式化输出命令  */
+    560            /*------------------*/
+    561            monitor aprintf (char *format,...)
+    562            {
+    563                unsigned char format_flag,*ptr;                               /*格式标志*/
+    564                unsigned int div_val, u_val, base;
+    565                va_list ap;
+    566                va_start(ap,format);
+    567                for (;;){
+    568                    while ((format_flag = *format++) != '%'){      /* Until '%' or '\0' */
+    569                        if (!format_flag){
+    570                            return (1);
+    571                        }
+    572                        if(aputchar (format_flag))return 1;
+    573                    }
+    574                    switch (format_flag = *format++){
+    575                        case 'c':
+    576                            format_flag = va_arg(ap,int);
+    577                        default:
+    578                            if(aputchar (format_flag))return 1;
+    579                        continue;
+    580                        case 's':
+    581                            ptr = va_arg(ap,char *);
+    582                        while (format_flag = *ptr++){
+    583                            if(aputchar (format_flag))return 1;
+    584                        }
+    585                        continue;
+    586                        case 'o':
+    587                        case 'd':
+    588                            base = 10;
+    589                            div_val = 10000;
+    590                        u_val = va_arg(ap,int);
+    591                            while (div_val > 1 && div_val > u_val){
+    592                                div_val /= 10;
+    593                            }
+    594                            if(format_flag=='o' && div_val==1)aputchar('0');
+    595                        do{
+    596                            if(format_flag=='o' && div_val==1)aputchar('.');
+    597                            aputchar (u_val / div_val+48);
+    598                            u_val %= div_val;
+    599                            div_val /= base;
+    600                        }
+    601                        while (div_val);
+    602                    }
+    603                }
+    604            }
+    605            
+    606            delay(unsigned int time)
+    607            {
+    608                unsigned char j;
+    609                for(;time>0;time--)for(j=0;j<DELAY_SCALE;j++);
+    610            }
+    611            
+    612            unsigned char key()
+    613            {
+    614            #pragma memory=code
+    615                unsigned char key_tab[16]={112,115,114,113,
+    616                                    179,178,177,211,
+    617                                    210,209,227,176,
+    618                                    208,226,225,224};
+    619            #pragma memory=default
+    620                unsigned char j,k;
+    621                for(j=0;j<4;j++){
+    622                    P1=~(1<<j);
+    623                    k=P1|0xf;
+    624                    if(k!=0xff){
+    625                        delay(20);
+    626                        if(k==P1|0xf)k=(k&0xf0)+j;
+    627                        break;
+    628                    }
+    629                }
+    630                P1=0xff;
+    631                for(j=0;j<16;j++){
+    632                    if(key_tab[j]==k){
+    633                        k=j;
+    634                        time=0;
+    635                        return k;
+    636                    }
+    637                }
+    638                return NO;
+    639            }
+    640            
+    641            unsigned char wait_key()
+    642            {
+    643                unsigned char k;
+    644                while(key()!=NO&&time<WAITTIME);
+    645                while((k=key())==NO && time<WAITTIME);
+    646                    return k;
+    647            }       
+    648                    
+    649            unsigned int ascanf(char *format,unsigned char lenth)
+    650            {
+    651                unsigned char k,i;
+    652                i=0;
+    653                for(;;){
+    654                    k=wait_key();
+    655                        if(k== OK)return 1;
+    656                        if(k== CANCEL && i>0){
+    657                            i--;
+    658                            format[i]=0;
+    659                        }
+    660                        if(k<10){
+    661                            if(i<(lenth)){
+    662                                format[i]=k+48;
+    663                                i++;
+    664                                for(k=i;k<lenth;k++)format[k]=0;
+    665                            }
+    666                        }
+    667                    aprintf("\n%s            ",format);
+    668                }
+    669            }
+    670            
+    671            unsigned int setup(char *message,int a,int max,int min)
+    672            {
+    673                unsigned char k;
+    674            loop:
+    675                    lcd_opr(1);
+    676                    aprintf(message,a);
+    677                if((k=wait_key())==NO)return 0xffff;
+    678                        if(k== OK)return a;
+    679                        if(k== INC){
+    680                            if(a<max)a++;
+    681                            aprintf(message,a);
+    682                            while(key()==INC){
+    683                                delay(500);
+    684                                while(key()==INC){
+    685                                    if(a<max)a++;
+    686                                    aprintf(message,a);
+    687                                    delay(200);
+    688                                }
+    689                            }
+    690                        }
+    691                        if(k== DEC){
+    692                            if(a>min)a--;
+    693                            aprintf(message,a);
+    694                            while(key()==DEC){
+    695                                delay(500);
+    696                                while(key()==DEC){
+    697                                    if(a>min)a--;
+    698                                    aprintf(message,a);
+    699                                    delay(200);
+    700                                }
+    701                            }
+    702                    }
+    703                goto loop;
+    704            }
+    705            
+    706            char password()
+    707            {
+    708                unsigned char pass[4],i;
+    709                for(i=0;i<4;i++)pass[i]=0;
+    710                aprintf("\aEnter Password:");
+    711                ascanf(pass,3);
+    712                for(i=0;i<3;i++){
+    713                    if(pass[i]!=eprom(PASSWORD+i)){
+    714                        aprintf("\bPassword Error!");
+    715                        wait_key();
+    716                        aprintf("\a");
+    717                        return 0;
+    718                    }
+    719                }
+    720                return 1;
+    721            }
+    722            
+    723            control_set()
+    724            {
+    725                unsigned char k;
+    726                #pragma memory=code
+    727                unsigned char *prompt[]={"\bMAXIMUM BOOST\nVOLTAGE %oV ",
+    728                                "\bBOOST TAPER AT\nVOLTAGE %oV ",
+    729                                "\bFLOAT MAXIMUM\nVOLTAGE %oV ",
+    730                                "\bFLOAT MINIMUM\nVOLTAGE %oV ",
+    731                                "\bRETURN TO BOOST\nMODE BELOW %oV ",
+    732                                "\bTEMPERATURE COMP\nAT -%dmV/逤/CELL ",
+    733                                "\bSTATE CHANGE\nDELAY %d S  "
+    734                            };
+    735                unsigned int MAX[]={BOOST_MAX,TAPER_MAX,FLOAT_MAX,FLOAT_MAX,BOOST_BELOW_MAX,COMP_TEMP_MAX,DELAY_CHANGE_MAX};
+    736                unsigned int MIN[]={BOOST_MIN,TAPER_MIN,FLOAT_MIN,FLOAT_MIN,BOOST_BELOW_MIN,COMP_TEMP_MIN,DELAY_CHANGE_MIN};
+    737                #pragma memory=default
+    738                unsigned int temp[7];
+    739                if(!password())return 0;
+    740                for(k=0;k<7;k++)
+    741                    if((temp[k]=setup(prompt[k],eprom(BOOST+k),MAX[k],MIN[k]))==0xffff)return 0;
+    742                aprintf("\aSAVE CHANGE?\nINC=YES OTHER=NO");
+    743                if(wait_key()==INC){
+    744                    for(k=0;k<7;k++)write_eprom(BOOST+k,temp[k]);
+    745                    arg();
+    746                }
+    747                lcd_opr(1);
+    748            }
+    749            
+    750            load_setup()
+    751            {
+    752                unsigned char k;
+    753                #pragma memory=code
+    754                unsigned char *prompt[]={
+    755                    "\bLOW BATTERY AL-\nARM ON AT %oV ",
+    756                    "\bRECONNECT LOAD\nABOVE %oV ",
+    757                    "\bHIGH BATTERY AL-\nARM ON AT %oV ",
+    758                    "\bDELAY BEFORE\nDISCONNECT %d S  "
+    759                };
+    760                unsigned int MAX[]={BT_MIN_MAX,BT_RELOAD_MAX,BT_MAX_MAX,DELAY_DIS_MAX};
+    761                unsigned int MIN[]={BT_MIN_MIN,BT_RELOAD_MIN,BT_MAX_MIN,DELAY_DIS_MIN};
+    762                #pragma memory=default
+    763                unsigned int temp[4];
+    764                if(!password())return 0;
+    765                for(k=0;k<4;k++)
+    766                    if((temp[k]=setup(prompt[k],eprom(BT_MIN+k),MAX[k],MIN[k]))==0xffff)return 0;
+    767                aprintf("\aSAVE CHANGE?\nINC=YES OTHER=NO");
+    768                if(wait_key()==INC){
+    769                    set_eprom(EWEN);
+    770                    for(k=0;k<4;k++)
+    771                        write_eprom(BT_MIN+k,temp[k]);
+    772                    set_eprom(EWDS);
+    773                    arg();
+    774                }
+    775                lcd_opr(1);
+    776            }
+    777            
+    778            
+    779            remote_set()
+    780            {
+    781                #pragma memory=code
+    782                unsigned char *prompt[]={"OFF","ON"};
+    783                #pragma memory=default
+    784                unsigned char /*Phone[1],*/Local/*,Up_hour,Up_min*/;
+    785                bit Upload=1;
+    786                unsigned char k;
+    787                if(!password())return 0;
+    788            /*    Upload=eprom(AUTO_UPLOAD);*/
+    789                Local=eprom(LOCAL);
+    790            /*    for(k=0;k<12;k++)Phone[k]=eprom(PHONE+k);
+    791                Phone[12]=0;*/
+    792            /*    while(1){
+    793                    k=Upload;
+    794                    aprintf("\aAuto Upload:\n[%s] ",prompt[k]);
+    795                    k=wait_key();
+    796                    if(k==NO)return 0;
+    797                    if(k==DEC || k==INC)Upload=~Upload;
+    798                    if(k==OK)break;
+    799                }*/
+    800            /*    if(Upload){*/
+    801                    if((Local=setup("\bSit Number:\n%d  ",eprom(LOCAL),255,0))==0xffff)return 0;
+    802            /*        if((Up_hour=setup("\bUpload Hour:\n%d ",eprom(UP_HOUR),23,0))==0xffff)return 0;
+    803                    if((Up_min =setup("\bUpload Minute:\n%d ",eprom(UP_MIN),59,0))==0xffff)return 0;
+    804                    aprintf("\aRemote Phone:\n%s",Phone);
+    805                    if(!ascanf(Phone,12))return 0;
+    806                }*/
+    807                aprintf("\aSAVE CHANGE?\nINC=YES OTHER=NO");
+    808                if(wait_key()==INC){
+    809                    set_eprom(EWEN);
+    810            /*        write_eprom(AUTO_UPLOAD,Upload);*/
+    811                    write_eprom(LOCAL,Local);
+    812            /*        for(k=0;k<12;k++)write_eprom(PHONE+k,Phone[k]);
+    813                    write_eprom(UP_HOUR,Up_hour);
+    814                    write_eprom(UP_MIN,Up_min);*/
+    815                    set_eprom(EWDS);
+    816                    arg();
+    817                }
+    818                lcd_opr(1);
+    819            }
+    820            
+    821            
+    822            unsigned char state(unsigned char a)
+    823            {
+    824                return ((sr_out>>a)&1)?'0':'1';
+    825            }
+    826            
+    827            solar()
+    828            {
+    829                #pragma memory=code
+    830                const char *prompt[]={"OFF","ON"};
+    831                #pragma memory=default
+    832                unsigned char bank=0;
+    833                lcd_opr(1);
+    834                IsSolar=1;
+    835                while(1){
+    836                    aprintf("\bBANK%d   \n[%s]     %oA  ",bank,prompt[state(bank)-'0'],ad_get(SR_I0+bank));
+    837                    delay(200);
+    838                    switch(key()){
+    839                        case INC:bank=(bank+1)%6;break;
+    840                        case DEC:if(bank==0)bank=5;else bank--;break;
+    841                        case SOLAR:
+    842                        case NO:break;
+    843                        default:IsSolar=0;lcd_opr(1);return 0;
+    844                    }
+    845                    if(time>WAITTIME){
+    846                            lcd_opr(1);
+    847                            IsSolar=0;
+    848                            return 0;
+    849                    }
+    850                }
+    851            }
+    852            
+    853            view()
+    854            {
+    855                unsigned char k,address;
+    856                unsigned char i;
+    857                i=k=0;
+    858                for(;;){
+    859                    address=i*4+DATA;
+    860                    aprintf("\aD%d H:%o L:%oV\nC:%d D:%d",i,eprom(address),eprom(address+1),eprom(address+2),eprom(address+3));
+    861                    switch(wait_key()){
+    862                        case INC:i=(i+1)%32;break;
+    863                        case DEC:if(i==0)i=31;else i--;break;
+    864                        default:lcd_opr(1);return 0;
+    865                    }
+    866                 }
+    867            }
+    868            
+    869            testself()
+    870            {
+    871                #pragma memory=code
+    872                const char *prompt[]={
+    873                    "Test Mode",
+    874                    "Meter Adjust"
+    875                };
+    876                #pragma memory=default
+    877                unsigned char k=0,l;
+    878                unsigned char i=0;
+    879                while(k!=OK){
+    880                    aprintf("\a%s ",prompt[i]);
+    881                    k=wait_key();
+    882                    if(k==0xff || k==CANCEL)return 0;
+    883                    if(k==INC || k==DEC)if(i==0)i=1;else i=0;
+    884                }
+    885                if(i==0){
+    886                    TEST=1;
+    887                    while(time<60 && key()!=CANCEL){
+    888                        aprintf("\bTEST A:%d %c%c%c%c%c%c \nB: %oV T:%d ",solar_state,state(0),state(1),state(2),state(3),state(4),state(5),ad_get(BT_V),ad_get(TEMP_BT)+20);
+    889                        delay(500);
+    890                    }
+    891                    Delay_change=eprom(DELAY_CHANGE);
+    892                    Delay_disconnect=eprom(DELAY_DISCONNECT);
+    893                    TEST=0;
+    894                }
+    895                else{
+    896                    for(i=0;i<16;i++){
+    897                        k=NO;
+    898                        l=eprom(CLIP+i);
+    899                        while(k!=OK){
+    900                            aprintf("\aIN %d\n%d  ",i,l);
+    901                            k=wait_key();
+    902                            if(k==NO || k==CANCEL)return 0;
+    903                            if(k==INC)l++;
+    904                            if(k==DEC)l--;
+    905                        }
+    906                        write_eprom(CLIP+i,l);
+    907                        lcd_opr(1);
+    908                    }
+    909                }
+    910            /*    else{
+    911                    set_eprom(EWEN);
+    912                    for(i=0;i<256;i++){
+    913                        tmp=eprom(i);
+    914                        write_eprom(i,0);
+    915                        if(eprom(i)!=0)goto ERR;
+    916                        write_eprom(i,0xff);
+    917                        if(eprom(i)!=0xff)goto ERR;
+    918                        write_eprom(i,tmp);
+    919                        if(eprom(i)!=tmp)goto ERR;
+    920                    }
+    921                    aprintf("\bEEPROM TEST OK!");
+    922                    while(wait_key()!=OK);
+    923                    goto next;
+    924            ERR:
+    925                    aprintf("\bEEPROM TEST \nFAILED!");
+    926                    while(wait_key()!=OK);
+    927                    return 0;
+    928            next:
+    929                    for(i=0;i<6;i++){
+    930                        EA=0;
+    931                        sr_out=1<<i;
+    932                        P0=sr_out;
+    933                        sr_out_en=1;
+    934                        sr_out_en=0;
+    935                        while(key()!=CANCEL)aprintf("\bTEST B:  BANK%d\n  %oA  ",i,ad_get(BT_I));
+    936                    }
+    937                    EA=1;
+    938                }*/
+    939                lcd_opr(1);
+    940            }
+    941            
+    942            /****************************/
+    943            /*  单片机串口通讯基本程序  */
+    944            /*  无硬件握手信号          */
+    945            /*  中断接收、查询发送      */
+    946            /****************************/
+    947            
+    948            
+    949            /*------------------*/
+    950            /*  单字符发送      */
+    951            /*------------------*/
+    952            send(unsigned char Data)
+    953            {
+    954                    while(TI);
+    955                SBUF=Data;
+    956                delay(10);
+    957            }
+    958            
+    959            /*------------------------------*/
+    960            /*  发送一个字符串，直到字符为0 */
+    961            /*------------------------------*/
+    962            sendstr(unsigned char *Data)
+    963            {
+    964                while(*Data!=0){
+    965                    send(*Data);
+    966                    Data++;
+    967                }
+    968            }
+    969            
+    970            /*--------------------------*/
+    971            /*  调制解调器初始化        */
+    972            /*  设置为无回显、数字回应  */
+    973            /*--------------------------*/
+    974            
+    975            /*--------------------------*/
+    976            /*  串行通讯中断程序        */
+    977            /*  接收中断将字符          */
+    978            /*  发送中断清除发送标志    */
+    979            /*--------------------------*/
+    980            interrupt [0x23] void SCON_int (void)
+    981            {
+    982                if(RI){
+    983                    buf[bufin]=SBUF;
+    984                    bufin>=(sizeof(buf)-1)?bufin=0:bufin++;
+    985                    RI=0;
+    986                }
+    987                TI=0;
+    988            }
+    989            
+    990            unsigned char recviced()
+    991            {
+    992                unsigned char i;
+    993                if(bufin!=bufout){
+    994                    return 1;
+    995                    for(i=bufout;i!=bufin;){
+    996                        if(buf[i]==13)return 1;
+    997                        i>=(sizeof(buf)-1)?i=0:i++;
+    998                    }
+    999                }
+   1000                return 0;
+   1001            }
+   1002            
+   1003            unsigned int getb()
+   1004            {
+   1005                unsigned char i;
+   1006                if(bufout!=bufin){
+   1007                    i=buf[bufout];
+   1008                    bufout>=(sizeof(buf)-1)?bufout=0:bufout++;
+   1009                    return i;
+   1010                }
+   1011                else return 0xffff;
+   1012            }
+   1013            
+   1014            /*unsigned char getcode()
+   1015            {
+   1016                unsigned int b1=0xffff,b2=0xffff;
+   1017                while((b1=getb())!=0xffff){
+   1018                    if(b1==13)return b2;
+   1019                    if((b2=getb())==13)return b1;
+   1020                }
+   1021            } */
+   1022            
+   1023            /*unsigned char dial()
+   1024            {
+   1025                unsigned char i,phone[13];
+   1026                for(i=0;i<13;i++)phone[i]=eprom(PHONE+i);
+   1027                bufin=bufout=0;
+   1028                sendstr("ATDT");
+   1029                sendstr(phone);
+   1030                send('\r');
+   1031                for(i=0;i<120;i++){
+   1032                    delay(500);
+   1033                    if(recviced())break;
+   1034                }
+   1035                if(getcode()==CONNECT)return 1;
+   1036                else return 0;
+   1037            } */
+   1038            
+   1039            sendw(unsigned int a)
+   1040            {
+   1041                union{
+   1042                unsigned int a;
+   1043                unsigned char c[2];
+   1044                }d;
+   1045                d.a=a;
+   1046                send(d.c[1]);
+   1047                send(d.c[0]);
+   1048            }
+   1049            
+   1050            unsigned int getw(){
+   1051                union{
+   1052                unsigned int a;
+   1053                unsigned char b[2];
+   1054                }c;
+   1055                unsigned int i;
+   1056                while((i=getb())==0xffff);
+   1057                c.b[0]=i;
+   1058                while((i=getb())==0xffff);
+   1059                c.b[1]=i;
+   1060                return c.a;
+   1061            }
+   1062            
+   1063            
+   1064            talk()
+   1065            {
+   1066                unsigned char flag=1,i;
+   1067                unsigned int CheckSum;
+   1068                unsigned int a,b;
+   1069                local=eprom(LOCAL);
+   1070                while(flag){
+   1071                    switch(getb()){
+   1072                            case NowData:{
+   1073                            CheckSum=0;
+   1074                            b=ad_get(BT_V);
+   1075                            CheckSum+=b;
+   1076                                            sendw(b);
+   1077                            for(a=0;a<6;a++){
+   1078                                b=0;
+   1079                                CheckSum+=b;
+   1080                                sendw(b);
+   1081                            }
+   1082                            b=ad_get(LOAD_V);
+   1083                            CheckSum+=b;
+   1084                            sendw(b);
+   1085                            b=ad_get(TEMP_BT);
+   1086                            CheckSum+=b;
+   1087                            sendw(b);
+   1088                            sendw(0); /*in_temp,nouse*/
+   1089                            b=ad_get(LOAD_I);
+   1090                            CheckSum+=b;
+   1091                            sendw(b);
+   1092                            b=ad_get(BT_I);
+   1093                            CheckSum+=b;
+   1094                            sendw(b);
+   1095                            for(a=0;a<6;a++){
+   1096                                b=ad_get(SR_I0+a);
+   1097                                delay(1000);
+   1098                                CheckSum+=b;
+   1099                                sendw(b);
+   1100                            }
+   1101                            b=eprom(DATA);
+   1102                            CheckSum+=b;
+   1103                            sendw(b);
+   1104                            b=eprom(DATA+1);
+   1105                            CheckSum+=b;
+   1106                            sendw(b);
+   1107                            b=chargeah%65536;
+   1108                            CheckSum+=b;
+   1109                            sendw(b);
+   1110                            b=chargeah/65536;
+   1111                            CheckSum+=b;
+   1112                            sendw(b);
+   1113                            b=dischargeah%65536;
+   1114                            CheckSum+=b;
+   1115                            sendw(b);
+   1116                            b=dischargeah/65536;
+   1117                            CheckSum+=b;
+   1118                            sendw(b);
+   1119                            b=hour*256+min;
+   1120                            CheckSum+=b;
+   1121                            sendw(b);
+   1122                            b=load*256+solar_state;
+   1123                            CheckSum+=b;
+   1124                            sendw(b);
+   1125                            sendw(CheckSum);
+   1126                                    break;
+   1127                            }
+   1128                            case HistoryData:{
+   1129                        CheckSum=0;
+   1130                                    for(a=DATA_INDEX;a<DATA+4*32;a++){
+   1131                                            b=eprom(a);
+   1132                            CheckSum+=b;
+   1133                                            sendw(b);
+   1134                                    }
+   1135                        sendw(CheckSum);
+   1136                                    break;
+   1137                            }
+   1138                            case SetData:{
+   1139                        CheckSum=0;
+   1140                                    for(a=7;a<37;a++){
+   1141                                            b=eprom(a);
+   1142                            CheckSum+=b;
+   1143                                            sendw(b);
+   1144                                    }
+   1145                        sendw(CheckSum);
+   1146                                    break;
+   1147                            }
+   1148                            case SendSetData:{
+   1149                                    set_eprom(EWEN);
+   1150                                    for(a=0;a<30;){
+   1151                                            send(a);
+   1152                                            b=getw();
+   1153                                            if(getw()==b){
+   1154                                                    write_eprom(a,b);
+   1155                                                    a++;
+   1156                                            }
+   1157                                    }
+   1158                                    set_eprom(EWDS);
+   1159                                    send(30);
+   1160                                    break;
+   1161                            }
+   1162                            case NO_CARRIER:flag=0;
+   1163                    }
+   1164                }
+   1165            }
+   1166            
+   1167            ToPrinter()
+   1168            {
+   1169                #pragma memory=code
+   1170                const char fs1[]={0x1b,0x2d,1};
+   1171                const char fs0[]={0x1b,0x21,0};
+   1172                #pragma memory=default
+   1173                char Phone[13];
+   1174                    int i;
+   1175                aprintf("\nPress F2 Print...");
+   1176                if(wait_key()!=F2)return 1;
+   1177                aprintf("\a\nNow Print...");
+   1178                OutDevice=PRINTER;
+   1179              aputchar(27);
+   1180              aputchar(64);
+   1181                aprintf(fs1);
+   1182                aprintf("\t\t<当前状态记录>");
+   1183                aprintf(fs0);aputchar(0);
+   1184                aprintf("\n蓄电池电压 = %o V",ad_get(BT_V));
+   1185                aprintf("\t蓄电池充电电流 = %o A\n",ad_get(BT_I));
+   1186                aprintf("负载电压 = %o V",ad_get(LOAD_V));
+   1187                aprintf("\t负载电流 = %o A\n",ad_get(LOAD_I));
+   1188                aprintf("蓄电池温度 = %d 摄氏度",ad_get(TEMP_BT));
+   1189                aprintf("\t充电状态 = %d \n",solar_state);
+   1190                for(i=0;i<6;i++)aprintf("太阳能电池第%d组电流 = %o A\n",i+1,ad_get(SR_I0+i));
+   1191                aprintf("当日累计充电电量 = %d AH",eprom(DATA+2));
+   1192                aprintf("\t当日累计放电电量 = %d AH\n",eprom(DATA+3));
+   1193                aprintf("当日蓄电池最高电压 = %oV",eprom(DATA));
+   1194                aprintf("\t当日蓄电池最低电压 = %oV\n",eprom(DATA+1));
+   1195                aprintf("运行时间:%d时%d分\n",hour,min);
+   1196                aprintf(fs1);
+   1197                aprintf("\t\t<设置状态记录>");aprintf(fs0);aputchar(0);
+   1198                aprintf("\n强充最大电压 = %oV\t",eprom(6));
+   1199                aprintf("强充递减电压 = %oV\n",eprom(1));
+   1200                aprintf("浮充电压上限 = %oV\t",eprom(FLOAT_MAX_S));
+   1201                aprintf("浮充电压下限 = %oV\n",eprom(FLOAT_MIN_S));
+   1202                aprintf("返回强充电压 = %oV\t",eprom(BOOST_BELOW));
+   1203                aprintf("温度补偿电压 = %dmV\n",eprom(COMP_TEMP));
+   1204                aprintf("告警电压上限 = %oV\t",eprom(BT_MAX));
+   1205                aprintf("告警电压下限 = %oV\n",eprom(BT_MIN));
+   1206                aprintf("负载重连接电压 = %oV\t",eprom(BT_RELOAD));
+   1207                aprintf("断开负载前延时 = %dS\n",eprom(DELAY_DISCONNECT));
+   1208                aprintf("状态转换延时 = %dS\t",eprom(DELAY_CHANGE));
+   1209                aprintf("定时自动上载 = %s\n",up_load?"Yes":"No");
+   1210                aprintf("自动上载时间 = %d:%d\t",eprom(UP_HOUR),eprom(UP_MIN));
+   1211                for(i=0;i<12;i++)Phone[i]=eprom(PHONE+i);Phone[12]=0;
+   1212                aprintf("上载电话号码 = %s\n",Phone);
+   1213                aprintf(fs1);
+   1214                aprintf("\t\t<历史数据记录>");aprintf(fs0);aputchar(0);
+   1215                aprintf("\n天数\t最高电压\t最低电压\t充电电量\t放电电量\n");
+   1216                    for(i=0;i<32;i++){
+   1217                    aprintf("第%d天\t%dV\t%dV\t%dAH\t%dAH\n",i,eprom((i*4+DATA))/10,eprom((i*4+DATA)+1)/10,eprom((i*4+DATA)+2),eprom((i*4+DATA)+3));
+   1218                    }
+   1219                aputchar(12);
+   1220                OutDevice=LCD;
+   1221                aprintf("\a");
+   1222                    return 0;
+   1223            }
+   1224            
+   1225            monitor graph()
+   1226            {
+   1227              #define MAXLINE 25            /*打印的总行数*/
+   1228              #define VALUEY  70            /*Y轴的最大值   */
+   1229              #define SCALE   10            /*Y轴的比例因子*/
+   1230              int line,day,i;
+   1231              code const char g[]={27,42,1,65,2,0};
+   1232              code unsigned int s[4][10]={{700,600,500,400,300,200,100,0,0,0},{700,600,500,400,300,200,100,0,0,0},{4800,4500,4000,3500,3000,2500,2000,1500,1000,500},{4800,4500,4000,3500,3000,2500,2000,1500,1000,500}};
+   1233              code const char g1[]={27,42,1,8,0};
+   1234              code char *prompt[]={"最后32天最高电压曲线(V/天数)\n\n",
+   1235                                   "最后32天最低电压曲线(V/天数)\n\n",
+   1236                                   "最后32天充电量曲线(安时/天数)\n\n",
+   1237                                   "最后32天放电量曲线(安时/天数)\n\n"};
+   1238              char a,counter;
+   1239              char b=0;
+   1240              aprintf("\aPrint His-Plot\nPress OK Confirm");
+   1241              if(wait_key()!=OK)return 1;
+   1242              aprintf("\aNow Printing...");
+   1243              OutDevice=PRINTER;
+   1244              aputchar(27);             /*设定1/8换行量*/
+   1245              aputchar(48);
+   1246              aputchar(27);             /*设定水平跳格位置为2*/
+   1247              aputchar(68);
+   1248              aputchar(2);
+   1249              aputchar(0);
+   1250              aputchar(27);             /*单向打印*/
+   1251              aputchar(85);
+   1252              aputchar(1);
+   1253              for(counter=0;counter<4;counter++){
+   1254                 b=0;
+   1255                 if(counter<2)aprintf("   V\n");
+   1256                 else         aprintf("   AH\n");
+   1257                  for(line=0;line<MAXLINE;line++){
+   1258                    if((s[counter][b])<=((MAXLINE-line)*(s[counter][0]/MAXLINE))&& (s[counter][b])>=((MAXLINE-line-1)*(s[counter][0]/MAXLINE))){
+   1259                      aprintf("%d",counter>1?s[counter][b]:s[counter][b]/10);
+   1260                      aputchar(9);
+   1261                      a=1<<(((s[counter][b]-((MAXLINE-line-1)*(s[counter][0]/MAXLINE)))*8)/(s[counter][0]/MAXLINE));
+   1262                      aprintf(g1);aputchar(0);
+   1263                      for(i=0;i<8;i++)aputchar(a);
+   1264                      b++;
+   1265                    }
+   1266                    else{
+   1267                        aputchar(9);
+   1268                      aprintf(g1);aputchar(0);
+   1269                      for(i=0;i<8;i++)aputchar(0);
+   1270                      }
+   1271                      aprintf(g);
+   1272                    aputchar(255);
+   1273                    for(day=31;day>=0;day--){
+   1274                      if(eprom(DATA+day*4+counter)>=((MAXLINE-line)*(s[counter][0]/MAXLINE))){
+   1275                    aputchar(255);
+   1276                    for(i=0;i<16;i++)aputchar(0);
+   1277                    aputchar(255);
+   1278                      }
+   1279                      else{
+   1280                    if(eprom(DATA+day*4+counter)>=((25-line-1)*(s[counter][0]/MAXLINE))){
+   1281                      a=1<<(((eprom(DATA+day*4+counter)-((25-line-1)*(s[counter][0]/MAXLINE)))*8)/(s[counter][0]/MAXLINE));
+   1282                      aputchar(a*2-1);
+   1283                      for(i=0;i<16;i++)aputchar(a);
+   1284                      aputchar(a*2-1);
+   1285                    }
+   1286                    else for(i=0;i<18;i++)aputchar(0);
+   1287                      }
+   1288                   }
+   1289                    aputchar(13);
+   1290                    aputchar(10);
+   1291                  }
+   1292                  aputchar(9);aprintf(g1);aputchar(0);
+   1293                  for(i=0;i<8;i++)aputchar(0);
+   1294                  aprintf(g);for(i=0;i<590;i++)aputchar(0x80);
+   1295                    aputchar(13);
+   1296                    aputchar(10);
+   1297                  aprintf("     1       5         10        15        20        25          31  (天数)\n");
+   1298                    aputchar(13);
+   1299                    aputchar(10);
+   1300                    aprintf("\n\t\t%s\n\n",prompt[counter]);
+   1301                    if(counter==1)aputchar(12);
+   1302                }
+   1303                aputchar(12);
+   1304            
+   1305              OutDevice=LCD;
+   1306              aprintf("\a");
+   1307              return 0;
+   1308            }
+   1309            
+   1310            save()
+   1311            {
+   1312                char i;
+   1313                set_eprom(EWEN);
+   1314                for(i=30;i>=0;i--){
+   1315                    write_eprom(DATA+(i+1)*4,eprom(DATA+i*4));
+   1316                    write_eprom(DATA+(i+1)*4+1,eprom(DATA+i*4+1));
+   1317                    write_eprom(DATA+(i+1)*4+2,eprom(DATA+i*4+2));
+   1318                    write_eprom(DATA+(i+1)*4+3,eprom(DATA+i*4+3));
+   1319                }
+   1320                write_eprom(DATA,0);
+   1321                write_eprom(DATA+1,10000);
+   1322                write_eprom(DATA+2,0);
+   1323                write_eprom(DATA+3,0);
+   1324                set_eprom(EWDS);
+   1325                chargeah=dischargeah=0;
+   1326            }
+   1327            
+   1328            main()
+   1329            {
+   1330                unsigned char tt;
+   1331                init();
+   1332                chargeah=dischargeah=0;
+   1333                set_eprom(EWEN);
+   1334                write_eprom(DATA,0);
+   1335                write_eprom(DATA+1,10000);
+   1336                set_eprom(EWDS);
+   1337                TEST=0;
+   1338                goto start;
+   1339                while(1){
+   1340                    if(key()!=NO){
+   1341            start:
+   1342                        lcd_init();
+   1343                        port|=LAMP;
+   1344                        P0=port;
+   1345                        port_out_en=1;
+   1346                        port_out_en=0;
+   1347                        while(time<WAITTIME){
+   1348                            aprintf("\bBATTERY VOLTAGE\n          %oV ",ad_get(BT_V));
+   1349                            switch(key()){
+   1350                                case BT_V_KEY:{
+   1351                                    while(key()==BT_V_KEY);
+   1352                                    while(key()==NO&&time<WAITTIME){
+   1353                                        aprintf("\bBATTERY VOLTAGE\n          %oV ",ad_get(BT_V));
+   1354                                        delay(500);
+   1355                                    }
+   1356                                    lcd_opr(1);
+   1357                                    break;
+   1358                                }
+   1359                                case BT_I_KEY:{
+   1360                                    while(key()==BT_I_KEY);
+   1361                                    while(key()==NO&&time<WAITTIME){
+   1362                                        aprintf("\bCHARGE CURRENT\n          %oA ",ad_get(BT_I));
+   1363                                        delay(500);
+   1364                                    }
+   1365                                    lcd_opr(1);
+   1366                                    break;
+   1367                                }
+   1368                                case LOAD_V_KEY:{
+   1369                                    while(key()==LOAD_V_KEY);
+   1370                                    while(key()==NO&&time<WAITTIME){
+   1371                                        aprintf("\bLOAD VOLTAGE\n          %oV ",ad_get(LOAD_V));
+   1372                                        delay(500);
+   1373                                    }
+   1374                                    lcd_opr(1);
+   1375                                    break;
+   1376                                }
+   1377                                case LOAD_I_KEY:{
+   1378                                    while(key()==LOAD_I_KEY);
+   1379                                    while(key()==NO&&time<WAITTIME){
+   1380                                        aprintf("\bLOAD CURRENT\n          %oA ",ad_get(LOAD_I));
+   1381                                        delay(500);
+   1382                                    }
+   1383                                    lcd_opr(1);
+   1384                                    break;
+   1385                                }
+   1386                                case SOLAR:solar();break;
+   1387                                case CONTROL_SET:control_set();break;
+   1388                                case TESTSELF:testself();break;
+   1389                                case REMOTE_SET:remote_set();break;
+   1390                                case LOAD_SET:load_setup();break;
+   1391                                case VIEW:view();break;
+   1392                                case F1:ToPrinter();aprintf("\a");break;
+   1393                                case F2:graph();aprintf("\a");
+   1394                            }
+   1395                            if(recviced()){
+   1396                            tt=getb();
+   1397                            if(tt==local||tt==0xff){
+   1398                                    send('K');
+   1399                                aprintf("\aRemote Connect!");
+   1400                                    talk();
+   1401                                }
+   1402                            }
+   1403                        }
+   1404                        lcd_opr(8);
+   1405                        port&=~LAMP;
+   1406                        P0=port;
+   1407                        port_out_en=1;
+   1408                        port_out_en=0;
+   1409                    }
+   1410            /*        if(up_load && hour==eprom(UP_HOUR) && min>=eprom(UP_MIN)){
+   1411                        if(dial()==1){
+   1412                            talk();
+   1413                            up_load=0;
+   1414                        }
+   1415                    }*/
+   1416                    if(recviced()){
+   1417                        tt=getb();
+   1418                        if(tt==local||tt==0xff){
+   1419                            send('K');
+   1420                            port|=LAMP;
+   1421                            P0=port;
+   1422                            port_out_en=1;
+   1423                            port_out_en=0;
+   1424                            lcd_init();
+   1425                            aprintf("\bRemote Connect!");
+   1426                            talk();
+   1427                            port&=~LAMP;
+   1428                            P0=port;
+   1429                            port_out_en=1;
+   1430                            port_out_en=0;
+   1431                            lcd_opr(8);
+   1432                        }
+   1433                    }
+   1434                    if(newday){
+   1435                        save();
+   1436                        newday=0;
+   1437                    }
+   1438                }
+   1439            }
+   1440            
+
+
+                                       S Y M B O L - T A B L E
+                                       =======================
+
+
+            #include file(s):
+
+       [1]       io52.h
+       [2]       \c-51\include\stdarg.h
+       [3]       jrtp99.h
+
+
+            Symbol                     Type     Mem     Class   Defline   Refline(s)
+            ------                     ----     ---     -----   -------   ----------
+
+AC                                      bit             ---       55:1  
+
+ACC                                     sfr             ---       26:1  
+
+ALARM_HI                            #define             ---      211:3        301      320
+
+ALARM_LO                            #define             ---      212:3        308      326
+
+ARCHIMEDES_C                        #define             ---          0  
+
+AUTO_UPLOAD                         #define             ---      150:3  
+
+B                                       sfr             ---       27:1  
+
+BANKS_DEFAULT_VALUE                 #define             ---      105:3  
+
+BANK_MAX                            #define             ---       45:3  
+
+BANK_MIN                            #define             ---       46:3  
+
+BOOST                               #define             ---      134:3        115      142      143      144
+                                                                              145      146      741      744
+
+BOOST_BELOW                         #define             ---      138:3        120      269     1202
+
+BOOST_BELOW_DEFAULT_VALUE           #define             ---      103:3        120
+
+BOOST_BELOW_MAX                     #define             ---       49:3        735
+
+BOOST_BELOW_MIN                     #define             ---       50:3        736
+
+BOOST_DEFAULT_VALUE                 #define             ---       98:3        115
+
+BOOST_MAX                           #define             ---       41:3        735
+
+BOOST_MIN                           #define             ---       42:3        736
+
+BT_I                                #define             ---      203:3        209      210      211      212
+                                                                              213      214      215      293
+                                                                             1092     1185     1362
+
+BT_I_KEY                            #define             ---       23:3       1359     1360
+
+BT_MAX                              #define             ---      144:3        123      299      319     1204
+
+BT_MAX_DEFAULT_VALUE                #define             ---      108:3        123
+
+BT_MAX_MAX                          #define             ---       60:3        760
+
+BT_MAX_MIN                          #define             ---       59:3        761
+
+BT_MIN                              #define             ---      142:3        122      306      766      771
+                                                                             1205
+
+BT_MIN_DEFAULT_VALUE                #define             ---      107:3        122
+
+BT_MIN_MAX                          #define             ---       57:3        760
+
+BT_MIN_MIN                          #define             ---       58:3        761
+
+BT_RELOAD                           #define             ---      143:3        124      325     1206
+
+BT_RELOAD_DEFAULT_VALUE             #define             ---      109:3        124
+
+BT_RELOAD_MAX                       #define             ---       62:3        760
+
+BT_RELOAD_MIN                       #define             ---       61:3        761
+
+BT_V                                #define             ---      188:3        205      207      244      888
+                                                                             1074     1184     1348     1353
+
+BT_V_KEY                            #define             ---       22:3       1350     1351
+
+BT_V_MAX                            #define             ---      159:3  
+
+BT_V_MIN                            #define             ---      158:3         89
+
+CANCEL                              #define             ---       33:3        547      656      882      887
+                                                                              902
+
+CHARGE_AH                           #define             ---      160:3  
+
+CLIP                                #define             ---      156:3        129      129      176      898
+                                                                              906
+
+COMP_TEMP                           #define             ---      139:3        121      244     1203
+
+COMP_TEMP_DEFAULT_VALUE             #define             ---      104:3        121
+
+COMP_TEMP_MAX                       #define             ---       51:3        735
+
+COMP_TEMP_MIN                       #define             ---       52:3        736
+
+COMP_ZERO                           #define             ---         23        206
+
+CONNECT                             #define             ---      226:3  
+
+CONTROL_SET                         #define             ---       26:3       1387
+
+CP_RL2                                  bit             ---      123:1  
+
+CY                                      bit             ---       54:1  
+
+C_T2                                    bit             ---      122:1  
+
+DATA                                #define             ---      167:3        126      291      291      292
+                                                                              292      295      296      859
+                                                                             1101     1104     1130     1191
+                                                                             1192     1193     1194     1217
+                                                                             1217     1217     1217     1274
+                                                                             1280     1281     1315     1315
+                                                                             1316     1316     1317     1317
+                                                                             1318     1318     1320     1321
+                                                                             1322     1323     1334     1335
+
+DATA_INDEX                          #define             ---      166:3        126     1130
+
+DAY                                 #define             ---      164:3        137
+
+DEC                                 #define             ---       32:3        691      694      696      840
+                                                                              863      883      904
+
+DELAY                              function    code    public      375        393      396      397      401
+                                                                              402      407      426      428
+                                                                              430      433      438      460
+                                                                              461      463      466      475
+
+DELAY_CHANGE                        #define             ---      140:3        119      252      262      275
+                                                                              285      891     1208
+
+DELAY_CHANGE_DEFAULT_VALUE          #define             ---      102:3        119
+
+DELAY_CHANGE_MAX                    #define             ---       53:3        735
+
+DELAY_CHANGE_MIN                    #define             ---       54:3        736
+
+DELAY_DISCONNECT                    #define             ---      145:3        125      313      892     1207
+
+DELAY_DISCONNECT_DEFAULT_VALUE      #define             ---      110:3        125
+
+DELAY_DIS_MAX                       #define             ---       63:3        760
+
+DELAY_DIS_MIN                       #define             ---       64:3        761
+
+DELAY_SCALE                         #define             ---         19        609
+
+DISCHARGE_AH                        #define             ---      161:3  
+
+DOOR                                #define             ---      200:3  
+
+DPH                                     sfr             ---       30:1  
+
+DPL                                     sfr             ---       29:1  
+
+Delay_change                           char   idata    public       30        248      252      258      262
+                                                                              271      275      281      285
+                                                                              331      891
+
+Delay_disconnect                       char   idata    public       30        300      307      313      332
+                                                                              892
+
+Do                                      bit             ---         46        389      391      422      424
+                                                                              454      456      469      476
+
+EA                                      bit             ---       75:1        107
+
+ERAL                                #define             ---      180:3  
+
+ERASE                               #define             ---      181:3  
+
+ES                                      bit             ---       77:1        107
+
+ET0                                     bit             ---       80:1  
+
+ET1                                     bit             ---       78:1  
+
+ET2                                     bit             ---       76:1  
+
+EWDS                                #define             ---      179:3        442      772      815     1158
+                                                                             1324     1336
+
+EWEN                                #define             ---      178:3        420      769      809     1149
+                                                                             1313     1333
+
+EX0                                     bit             ---       81:1  
+
+EX0_int                            function    code    extern    129:1  
+
+EX1                                     bit             ---       79:1  
+
+EX1_int                            function    code    extern    133:1  
+
+EXEN2                                   bit             ---      120:1  
+
+EXF2                                    bit             ---      117:1  
+
+F0                                      bit             ---       56:1  
+
+F1                                  #define             ---       34:3       1392
+
+F2                                  #define             ---       35:3       1176     1393
+
+FLOAT_MAX                           #define             ---       47:3        735      735
+
+FLOAT_MAX_DEFAULT_VALUE             #define             ---      100:3        117
+
+FLOAT_MAX_S                         #define             ---      136:3        117      279     1200
+
+FLOAT_MIN                           #define             ---       48:3        736      736
+
+FLOAT_MIN_DEFAULT_VALUE             #define             ---      101:3        118
+
+FLOAT_MIN_S                         #define             ---      137:3        118      269     1201
+
+FREQ                                #define             ---         18  
+
+HOUR                                #define             ---      148:3  
+
+HistoryData                         #define             ---      230:3       1128
+
+IE                                      sfr             ---       38:1        102
+
+IE0                                     bit             ---       70:1  
+
+IE1                                     bit             ---       68:1  
+
+INC                                 #define             ---       31:3        679      682      684      743
+                                                                              768      808      839      862
+                                                                              883      903
+
+INT0                                    bit             ---       99:1  
+
+INT1                                    bit             ---       98:1  
+
+IP                                      sfr             ---       39:1  
+
+IT0                                     bit             ---       71:1  
+
+IT1                                     bit             ---       69:1  
+
+IsSolar                              bitvar     bit    public       51        366      834      843      847
+
+LAMP                                #define             ---      216:3         85     1343     1405     1420
+                                                                             1427
+
+LCD                                 #define             ---      234:3         91      531      545     1220
+                                                                             1305
+
+LCD_TEMP_DEFAULT_VALUE              #define             ---      106:3  
+
+LCD_TEMP_MAX                        #define             ---       55:3  
+
+LCD_TEMP_MIN                        #define             ---       56:3  
+
+LOAD                                #define             ---      223:3        218      218      365      365
+
+LOAD_DISABLE                        #define             ---      213:3        301      308      320      326
+
+LOAD_I                              #define             ---      202:3        208      294     1089     1187
+                                                                             1380
+
+LOAD_I_KEY                          #define             ---       25:3       1377     1378
+
+LOAD_SET                            #define             ---       28:3       1390
+
+LOAD_V                              #define             ---      189:3        205     1082     1186     1371
+
+LOAD_V_KEY                          #define             ---       24:3       1368     1369
+
+LOCAL                               #define             ---      147:3        109      789      801      811
+                                                                             1069
+
+MAXLINE                             #define             ---       1227       1257     1258     1258     1258
+                                                                             1258     1261     1261     1261
+                                                                             1274     1274     1280     1281
+                                                                             1281
+
+MINUTE                              #define             ---      149:3  
+
+MODEL                               #define             ---       14:3       40:3     67:3     97:3    113:3
+                                                                               94       97      112      131
+                                                                              244
+
+NC1                                 #define             ---      198:3  
+
+NC2                                 #define             ---      199:3  
+
+NO                                  #define             ---       36:3        638      644      645      677
+                                                                              842      897      902     1340
+                                                                             1352     1361     1370     1379
+
+NO_CARRIER                          #define             ---      227:3       1162
+
+NowData                             #define             ---      228:3       1072
+
+OFF                                 #define             ---      173:3  
+
+OK                                  #define             ---       30:3        655      678      879      899
+                                                                             1241
+
+ON                                  #define             ---      172:3  
+
+OV                                      bit             ---       59:1  
+
+OVER                                #define             ---      229:3  
+
+OutDevice                            bitvar     bit    public       37         91      531      545      548
+                                                                             1178     1220     1243     1305
+
+P                                       bit             ---       60:1  
+
+P0                                      sfr             ---       15:1         82       85      157      219
+                                                                              344      346      367      371
+                                                                              493      497      506      535
+                                                                              536      537      538      550
+                                                                             1344     1406     1421     1428
+
+P1                                      sfr             ---       16:1        622      623      626      630
+
+P2                                      sfr             ---       17:1  
+
+P3                                      sfr             ---       18:1  
+
+PASSWORD                            #define             ---      154:3        127      127      713
+
+PCON                                    sfr             ---       31:1        106
+
+PHONE                               #define             ---      153:3        128      128     1211
+
+PRINTER                             #define             ---      235:3        548     1178     1243
+
+PS                                      bit             ---       86:1  
+
+PSW                                     sfr             ---       25:1  
+
+PT0                                     bit             ---       89:1  
+
+PT1                                     bit             ---       87:1  
+
+PT2                                     bit             ---       85:1  
+
+PX0                                     bit             ---       90:1  
+
+PX1                                     bit             ---       88:1  
+
+RB8                                     bit             ---      110:1  
+
+RCAP2H                                  sfr             ---       44:1  
+
+RCAP2L                                  sfr             ---       43:1  
+
+RCLK                                    bit             ---      118:1  
+
+RD                                      bit             ---       94:1  
+
+REMOTE_SET                          #define             ---       27:3       1389
+
+REN                                     bit             ---      108:1  
+
+RI                                      bit             ---      112:1        982      985
+
+RS                                      bit             ---         45        494      505      533      538
+
+RS0                                     bit             ---       58:1  
+
+RS1                                     bit             ---       57:1  
+
+RXD                                     bit             ---      101:1  
+
+SBUF                                    sfr             ---       41:1        955      983
+
+SCALE                               #define             ---       1229  
+
+SCON                                    sfr             ---       40:1        103
+
+SCON_int                           function    code    public      981      137:1
+
+SM0                                     bit             ---      105:1  
+
+SM1                                     bit             ---      106:1  
+
+SM2                                     bit             ---      107:1  
+
+SOLAR                               #define             ---       21:3        841     1386
+
+SP                                      sfr             ---       28:1  
+
+SR_I0                               #define             ---      204:3        210      836     1096     1190
+
+SR_I1                               #define             ---      205:3        211
+
+SR_I2                               #define             ---      206:3        212
+
+SR_I3                               #define             ---      207:3        213
+
+SR_I4                               #define             ---      208:3        214
+
+SR_I5                               #define             ---      209:3        215
+
+SR_V0                               #define             ---      190:3  
+
+SR_V1                               #define             ---      191:3  
+
+SR_V2                               #define             ---      192:3  
+
+SR_V3                               #define             ---      193:3  
+
+SR_V4                               #define             ---      194:3  
+
+SR_V5                               #define             ---      195:3  
+
+SYSTEM_FLAG                         #define             ---      133:3        112      131
+
+SendSetData                         #define             ---      232:3       1148
+
+SetData                             #define             ---      231:3       1138
+
+T0                                      bit             ---       97:1  
+
+T0_INIT                             #define             ---         21        232      233
+
+T0_int                             function    code    public      226      131:1
+
+T1                                      bit             ---       96:1  
+
+T1_int                             function    code    extern    135:1  
+
+T2CON                                   sfr             ---       42:1  
+
+T2EX_int                           function    code    extern    141:1  
+
+T2_int                             function    code    extern    139:1  
+
+TAPER                               #define             ---      135:3        116      141      142      143
+                                                                              144      145
+
+TAPER_DEFAULT_VALUE                 #define             ---       99:3        116
+
+TAPER_MAX                           #define             ---       43:3        735
+
+TAPER_MIN                           #define             ---       44:3        736
+
+TB8                                     bit             ---      109:1  
+
+TCLK                                    bit             ---      119:1  
+
+TCON                                    sfr             ---       32:1  
+
+TEMP_BT                             #define             ---      196:3        206      244      888     1085
+                                                                             1188
+
+TEMP_LCD                            #define             ---      197:3  
+
+TEST                                 bitvar     bit    public       52        252      262      275      285
+                                                                              313      886      893     1337
+
+TESTSELF                            #define             ---       29:3       1388
+
+TF0                                     bit             ---       66:1  
+
+TF1                                     bit             ---       64:1  
+
+TF2                                     bit             ---      116:1  
+
+TH0                                     sfr             ---       36:1        232
+
+TH1                                     sfr             ---       37:1        105
+
+TH2                                     sfr             ---       46:1  
+
+TI                                      bit             ---      111:1        954      987
+
+TIMEBASE                            #define             ---         20        236
+
+TL0                                     sfr             ---       34:1        233
+
+TL1                                     sfr             ---       35:1  
+
+TL2                                     sfr             ---       45:1  
+
+TMOD                                    sfr             ---       33:1        104
+
+TR0                                     bit             ---       67:1        107
+
+TR1                                     bit             ---       65:1        107
+
+TR2                                     bit             ---      121:1  
+
+TXD                                     bit             ---      100:1  
+
+ToPrinter                          function    code    public     1168       1392
+
+UJ                                  #define             ---      214:3        301      308      320      326
+
+UP_HOUR                             #define             ---      151:3       1210
+
+UP_MIN                              #define             ---      152:3       1210
+
+VALUEY                              #define             ---       1228  
+
+VIEW                                #define             ---       20:3       1391
+
+WAITTIME                            #define             ---         22        644      645      845     1347
+                                                                             1352     1361     1370     1379
+
+WR                                      bit             ---       95:1  
+
+YAN                                 #define             ---      201:3  
+
+_STDARG_INCLUDED                    #define             ---       49:2  
+
+__DATE__                            #define             ---          0  
+
+__FILE__                            #define             ---          0  
+
+__JMP_BUF__                         #define             ---          0  
+
+__LINE__                            #define             ---          0  
+
+__STDC__                            #define             ---          0  
+
+__TID__                             #define             ---          0       11:2     31:2     31:2
+
+__TIME__                            #define             ---          0  
+
+ad                                 function    code    public      150        205      206      207      208
+                                                                              209      222
+
+ad_get                             function    code    public      203        205      244      244      293
+                                                                              294      836      888      888
+                                                                             1074     1082     1085     1089
+                                                                             1092     1096     1184     1185
+                                                                             1186     1187     1188     1190
+                                                                             1348     1353     1362     1371
+                                                                             1380
+
+aprintf                            function    code    public      562         95      113      139      546
+                                                                               66      667      676      681
+                                                                              686      693      698      710
+                                                                              714      716      742      767
+                                                                              807      836      860      880
+                                                                              888      900     1175     1177
+                                                                             1181     1182     1183     1184
+                                                                             1185     1186     1187     1188
+                                                                             1189     1190     1191     1192
+                                                                             1193     1194     1195     1196
+                                                                             1197     1197     1198     1199
+                                                                             1200     1201     1202     1203
+                                                                             1204     1205     1206     1207
+                                                                             1208     1209     1210     1212
+                                                                             1213     1214     1214     1215
+                                                                             1217     1221     1240     1242
+                                                                             1255     1256     1259     1262
+                                                                             1268     1271     1292     1294
+                                                                             1297     1300     1306     1348
+                                                                             1353     1362     1371     1380
+                                                                             1392     1393     1399     1425
+
+aputchar                           function    code    public      530        553      572      578      583
+                                                                              594      596      597     1179
+                                                                             1180     1183     1197     1214
+                                                                             1219     1244     1245     1246
+                                                                             1247     1248     1249     1250
+                                                                             1251     1252     1260     1262
+                                                                             1263     1267     1268     1269
+                                                                             1272     1275     1276     1277
+                                                                             1282     1283     1284     1286
+                                                                             1289     1290     1292     1292
+                                                                             1293     1294     1295     1296
+                                                                             1298     1299     1301     1303
+
+arg                                function    code    public      136        101      130      101      745
+                                                                              773      816
+
+ascanf                             function    code    public      650        711
+
+bank0                               #define             ---      217:3  
+
+bank1                               #define             ---      218:3  
+
+bank2                               #define             ---      219:3  
+
+bank3                               #define             ---      220:3  
+
+bank4                               #define             ---      221:3  
+
+bank5                               #define             ---      222:3  
+
+buf                                   array   idata    public       33        983      984      996      997
+                                                                             1007     1008
+
+bufin                                  char   idata    public       34        111      983      984      984
+                                                                              984      993      995     1006
+
+bufout                                 char   idata    public       34        111      993      995     1006
+                                                                             1007     1008     1008     1008
+
+busy                               function    code    public      491        504      532
+
+chargeah                             u_long   idata    public       35        293      295     1107     1110
+                                                                             1325     1332
+
+clk                                     bit             ---         46        376      377      388      421
+                                                                              453
+
+control_set                        function    code    public      724       1387
+
+cs                                      bit             ---         46        388      390      410      421
+                                                                              423      441      453      455
+                                                                              457      458      478
+
+cs0                                     bit             ---         47        164      179
+
+delay                              function    code    public      607        108       67      625      683
+                                                                              687      695      699      837
+                                                                              889      956     1097     1354
+                                                                             1363     1372     1381
+
+di                                      bit             ---         46        388      392      395      400
+                                                                              406      421      425      427
+                                                                              429      432      437      453
+                                                                              459      462      465
+
+dischargeah                          u_long   idata    public       35        294      296     1113     1116
+                                                                             1325     1332
+
+dout                                    bit             ---         47        162      165      169      173
+                                                                              179
+
+e                                       bit             ---         45        496      498      507      508
+                                                                              540      541
+
+eprom                              function    code    public      449        109      112      137      141
+                                                                              142      142      143      143
+                                                                              144      144      145      145
+                                                                              146      176      244      246
+                                                                              252      256      262      269
+                                                                              269      275      279      285
+                                                                              291      292      299      306
+                                                                              313      319      325       69
+                                                                              713      741      766      789
+                                                                              801      860      860      860
+                                                                              860      891      892      898
+                                                                             1069     1101     1104     1131
+                                                                             1141     1191     1192     1193
+                                                                             1194     1198     1199     1200
+                                                                             1201     1202     1203     1204
+                                                                             1205     1206     1207     1208
+                                                                             1210     1210     1211     1217
+                                                                             1217     1217     1217     1274
+                                                                             1280     1281     1315     1316
+                                                                             1317     1318
+
+getb                               function    code    public     1004       1056     1058     1071     1396
+                                                                             1417
+
+getw                               function    code    public     1050       1152     1153
+
+graph                              function    code    public     1226       1393
+
+hour                                   char   idata    public       31        339     1119     1195
+
+init                               function    code    public       79       1331
+
+key                                function    code    public      613        547       73      644      645
+                                                                              682      684      694      696
+                                                                              838      887     1340     1349
+                                                                             1351     1352     1360     1361
+                                                                             1369     1370     1378     1379
+
+lcd_init                           function    code    public      515         92      138       65     1342
+                                                                             1424
+
+lcd_opr                            function    code    public      503        517      519      521      522
+                                                                              675      747      775      818
+                                                                              833      843      846      864
+                                                                              907      939     1356     1365
+                                                                             1374     1383     1404     1431
+
+load                                   char   idata    public       29         88      218      298      302
+                                                                              309      318      321      327
+                                                                              365     1122
+
+load_out                               char   idata    public       32         82      301      308      320
+                                                                              326      346
+
+load_out_en                             bit             ---         43         83      347      348
+
+load_setup                         function    code    public      751       1390
+
+local                                  char   idata    public       32        109     1069     1397     1418
+
+main                               function    code    public     1329  
+
+min                                    char   idata    public       31        337      338     1119     1195
+
+newday                               bitvar     bit    public       38        339     1434     1436
+
+out_en                                  bit             ---         42         81
+
+password                           function    code    public      707        739      764      787
+
+port                                   char   idata    public       32         85      156      156      157
+                                                                             1343     1344     1405     1406
+                                                                             1420     1421     1427     1428
+
+port_out_en                             bit             ---         43         86       87      158      159
+                                                                             1345     1346     1407     1408
+                                                                             1422     1423     1429     1430
+
+recviced                           function    code    public      991       1395     1416
+
+remote_set                         function    code    public      780       1389
+
+rw                                      bit             ---         45        495      505      533
+
+save                               function    code    public     1311       1435
+
+sec                                    char   idata    public       31        334      335
+
+send                               function    code    public      953        965     1046     1047     1151
+                                                                             1159     1398     1419
+
+sendstr                            function    code    public      963        110       72
+
+sendw                              function    code    public     1040       1076     1080     1084     1087
+                                                                             1088     1091     1094     1099
+                                                                             1103     1106     1109     1112
+                                                                             1115     1118     1121     1124
+                                                                             1125     1133     1135     1143
+                                                                             1145
+
+set_eprom                          function    code    public      386         68      420      442      769
+                                                                              772      809      815     1149
+                                                                             1158     1313     1324     1333
+                                                                             1336
+
+setup                              function    code    public      672        741      766      801
+
+sk                                      bit             ---         47        161      166      167      168
+                                                                              170      172      174      179
+
+solar                              function    code    public      828       1386
+
+solar_state                            char   idata    public       29        245      246      247      248
+                                                                              251      256      257      258
+                                                                              261      269      270      271
+                                                                              271      271      274      279
+                                                                              280      281      284      349
+                                                                              363      888     1122     1189
+
+sr_out                                 char   idata    public       32         82      210      211      212
+                                                                              213      214      215      218
+                                                                              218      219      351      353
+                                                                              355      357      359      361
+                                                                              362      365      365      367
+                                                                              824
+
+sr_out_en                               bit             ---         43         84      220      221      368
+                                                                              369
+
+state                              function    code    public      823        836      888      888      888
+                                                                              888      888      888
+
+stb                                     bit             ---         48        551      552
+
+talk                               function    code    public     1065       1400     1426
+
+testself                           function    code    public      870       1388
+
+time                                   char   idata    public       31        336      634      644      645
+                                                                              845      887     1347     1352
+                                                                             1361     1370     1379
+
+up                                   bitvar     bit    public       36  
+
+up_load                              bitvar     bit    public       36       1209
+
+usy                                     bit             ---         49        544
+
+va_arg                              #define             ---       41:2        576      581      590
+
+va_end                              #define             ---       47:2  
+
+va_list                               array           typedef     29:2        565
+
+va_start                            #define             ---       40:2        566
+
+view                               function    code    public      854       1391
+
+wait_key                           function    code    public      642        114       70      654      677
+                                                                              715      743      768      808
+                                                                              861      881      901     1176
+                                                                             1241
+
+wdg                                     bit             ---         44        239      239
+
+write_eprom                        function    code    public      418         89      115      116      117
+                                                                              118      119      120      121
+                                                                              122      123      124      125
+                                                                              126      127      128      129
+                                                                              131      141      142      143
+                                                                              144      145      146      291
+                                                                              292      295      296       71
+                                                                              744      771      811      906
+                                                                             1154     1315     1316     1317
+                                                                             1318     1320     1321     1322
+                                                                             1323     1334     1335
+
+
+
+Errors: none
+Warnings: none
+Code size: 10541
+Constant size: 2068
+Static variable size: Data(0) Idata(28) Bit(6) Xdata(0)
+

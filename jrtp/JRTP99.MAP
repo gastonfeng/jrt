@@ -1,0 +1,560 @@
+################################################################################
+#                                                                              #
+#        Archimedes Universal Linker V4.30/DXT         16/Feb/100  18:01:27     #
+#                                                                              #
+#           Target CPU    =  8051                                              #
+#           List file     =  jrtp99.map                                        #
+#           Output file 1 =  jrtp99.hex                                        #
+#           Output format =  aomf8051                                          #
+#           Command line  =  -c8051 -FAOMF8051 jrtp99 \c-51\lib\cl8051s -f LNK #
+#                            (-D_R=0                                           #
+#                            -Z(CODE)INTVEC,C_ICALL,RCODE,CONST,CCSTR,CSTR,    #
+#                            CODE,X_CDATA,D_CDATA,I_CDATA,C_RECFN,RF_XDATA,    #
+#                            c1=0                                              #
+#                            -Z(DATA)D_IDATA,D_UDATA,C_ARGD=8                  #
+#                            -Z(IDATA)I_IDATA,I_UDATA,C_ARGI -Z(IDATA)CSTACK   #
+#                            -Z(XDATA)X_UDATA,X_IDATA,C_ARGX,ECSTR=6000        #
+#                            -Z(BIT)BITVARS,C_ARGB=20 -K -R -z) -l jrtp99.map  #
+#                            -o jrtp99.hex -x -n                               #
+#                                                                              #
+#                                               (c) Copyright Archimedes 1991  #
+################################################################################
+
+Warning[16]: Function write_eprom in module jrtp99 ( jrtp99.r03 ) is called from two function trees ( with roots main and T0_int )
+Warning[16]: Function ad_get in module jrtp99 ( jrtp99.r03 ) is called from two function trees ( with roots T0_int and main )
+Warning[16]: Function eprom in module jrtp99 ( jrtp99.r03 ) is called from two function trees ( with roots main and T0_int )
+
+
+
+
+                ****************************************
+                *                                      *
+                *           CROSS REFERENCE            *
+                *                                      *
+                ****************************************
+
+       Program entry at : 0000  Relocatable, from module : CSTARTUP
+
+
+
+                ****************************************
+                *                                      *
+                *             MODULE MAP               *
+                *                                      *
+                ****************************************
+
+  DEFINED ABSOLUTE ENTRIES
+  PROGRAM MODULE, NAME : ?ABS_ENTRY_MOD
+          ABSOLUTE ENTRIES        ADDRESS          REF BY MODULE
+           ==============         =======          =============
+           _R                      0000            jrtp99
+                                                   CSTARTUP
+                                                   ?SI_DIV_L00
+                                                   ?SI_MOD_L00
+                                                   ?UI_DIV_L00
+                                                   ?UI_MOD_L00
+                                                   ?L_MUL_L01
+                                                   ?UL_DIV_L01
+                                                   ?I_ASG_L17
+                                                   ?L_ASG_L17
+                                                   ?C_ST_PTR_L17
+                                                   ?I_ST_PTR_L17
+                                                   ?L_ST_PTR_L17
+                                                   ?C_LD_PTR_L17
+                                                   ?I_LD_PTR_L17
+                                                   ?P_LD_PTR_L17
+                                                   ?L_LD_PTR_L17
+                                                   ?RECURSION
+
+
+  SEGMENTS IN THE MODULE
+  ======================
+C_RECFN
+  Relative segment, address : 361D - 3634
+    -------------------------------------------------------------------------
+C_ARGI
+  Relative segment, address : 0025 - 008D
+
+    *************************************************************************
+
+  FILE NAME : jrtp99.r03
+  PROGRAM MODULE, NAME : jrtp99
+
+  SEGMENTS IN THE MODULE
+  ======================
+CODE
+  Relative segment, address : 0CF0 - 361C
+           ENTRIES                ADDRESS          REF BY MODULE
+           DELAY                   15AD            Not referred to
+           SCON_int                23C4            Not referred to
+           T0_int                  11BB            Not referred to
+               idata = 0033 ( 0002 , 0000 )
+           ToPrinter               28BC            Not referred to
+               idata = 0073 ( 000F , 0000 )
+           ad                      0FAA            Not referred to
+               idata = 002A ( 0006 , 0001 )
+           ad_get                  10A0            Not referred to
+               recursive function = 361D
+               idata = 0031 ( 0000 , 0001 )
+           aprintf                 184C            Not referred to
+               recursive function = 3625
+               idata = 003C ( 000D , 0015 )
+           aputchar                17BF            Not referred to
+               recursive function = 362D
+               idata = 003A ( 0000 , 0001 )
+           arg                     0E88            Not referred to
+           ascanf                  1AF3            Not referred to
+               idata = 0073 ( 0002 , 0004 )
+           busy                    175E            Not referred to
+               idata = 0035 ( 0001 , 0000 )
+           control_set             1DB2            Not referred to
+               idata = 007E ( 000F , 0000 )
+           delay                   1A12            Not referred to
+               idata = 0035 ( 0001 , 0002 )
+           eprom                   16A9            Not referred to
+               idata = 0025 ( 0004 , 0001 )
+           getb                    2438            Not referred to
+               idata = 0035 ( 0001 , 0000 )
+           getw                    2480            Not referred to
+               idata = 0036 ( 0004 , 0000 )
+           graph                   2CBD            Not referred to
+               idata = 0073 ( 0009 , 0000 )
+           init                    0CF0            Not referred to
+               idata = 0073 ( 0001 , 0000 )
+           key                     1A3C            Not referred to
+               idata = 0038 ( 0002 , 0000 )
+           lcd_init                17AA            Not referred to
+           lcd_opr                 1783            Not referred to
+               idata = 0036 ( 0000 , 0001 )
+           load_setup              1E90            Not referred to
+               idata = 007E ( 0009 , 0000 )
+           main                    339B            CSTARTUP
+               idata = 008D ( 0001 , 0000 )
+           password                1D34            Not referred to
+               idata = 0079 ( 0005 , 0000 )
+           recviced                23F8            Not referred to
+               idata = 0035 ( 0001 , 0000 )
+           remote_set              1F78            Not referred to
+               idata = 007E ( 0002 , 0000 )
+           save                    32B2            Not referred to
+               idata = 0035 ( 0001 , 0000 )
+           send                    237B            Not referred to
+               idata = 0038 ( 0000 , 0001 )
+           sendstr                 2390            Not referred to
+               idata = 0039 ( 0000 , 0003 )
+           sendw                   246A            Not referred to
+               idata = 0039 ( 0002 , 0002 )
+           set_eprom               15B2            Not referred to
+               idata = 0025 ( 0001 , 0001 )
+           setup                   1BC1            Not referred to
+               idata = 0073 ( 0001 , 0009 )
+           solar                   2008            Not referred to
+               idata = 0073 ( 0001 , 0000 )
+           state                   1FF3            Not referred to
+               idata = 0035 ( 0000 , 0001 )
+           talk                    24BC            Not referred to
+               idata = 003D ( 0008 , 0000 )
+           testself                2182            Not referred to
+               idata = 0073 ( 0003 , 0000 )
+           view                    20CC            Not referred to
+               idata = 0073 ( 0003 , 0000 )
+           wait_key                1AC6            Not referred to
+               idata = 003A ( 0001 , 0000 )
+           write_eprom             1619            Not referred to
+               idata = 0027 ( 0001 , 0003 )
+    -------------------------------------------------------------------------
+CSTR
+  Relative segment, address : 05DE - 0CEF
+    -------------------------------------------------------------------------
+CONST
+  Relative segment, address : 0502 - 05DD
+    -------------------------------------------------------------------------
+INTVEC
+  Common segment, address : 0000 - 0025
+    -------------------------------------------------------------------------
+I_UDATA
+  Relative segment, address : 0008 - 0023
+           ENTRIES                ADDRESS          REF BY MODULE
+           Delay_change            000A            Not referred to
+           Delay_disconnect        000B            Not referred to
+           buf                     0014            Not referred to
+           bufin                   0018            Not referred to
+           bufout                  0019            Not referred to
+           chargeah                001A            Not referred to
+           dischargeah             001E            Not referred to
+           hour                    000F            Not referred to
+           load                    0008            Not referred to
+           load_out                0012            Not referred to
+           local                   0013            Not referred to
+           min                     000E            Not referred to
+           port                    0010            Not referred to
+           sec                     000C            Not referred to
+           solar_state             0009            Not referred to
+           sr_out                  0011            Not referred to
+           time                    000D            Not referred to
+    -------------------------------------------------------------------------
+BITVARS
+  Relative segment, address : 0024.0 - 0024.5
+           ENTRIES                ADDRESS          REF BY MODULE
+           IsSolar                 0024.4          Not referred to
+           OutDevice               0024.2          Not referred to
+           TEST                    0024.5          Not referred to
+           newday                  0024.3          Not referred to
+           up                      0024.1          Not referred to
+           up_load                 0024.0          Not referred to
+
+    *************************************************************************
+
+  FILE NAME : \c-51\lib\cl8051s.r03
+  PROGRAM MODULE, NAME : CSTARTUP
+
+  SEGMENTS IN THE MODULE
+  ======================
+CSTACK
+  Relative segment, address : 008E - 00AB
+    -------------------------------------------------------------------------
+INTVEC
+  Common segment, address : 0000 - 0002
+    -------------------------------------------------------------------------
+RCODE
+  Relative segment, address : 0026 - 00D5
+    -------------------------------------------------------------------------
+D_UDATA
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+I_UDATA
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+X_UDATA
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+D_CDATA
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+I_CDATA
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+X_CDATA
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+D_IDATA
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+I_IDATA
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+X_IDATA
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+ECSTR
+  Relative segment, address : Not applicable
+    -------------------------------------------------------------------------
+CCSTR
+  Relative segment, address : Not applicable
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : exit
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 00D6 - 00D7
+           ENTRIES                ADDRESS          REF BY MODULE
+           exit                    00D6            Not referred to
+           ?C_EXIT                 00D6            CSTARTUP
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?I_MUL_L00
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 00D8 - 00EC
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?I_MUL_L00              00D8            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?SI_DIV_L00
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 00ED - 0116
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?SI_DIV_L00             00ED            jrtp99
+                                                   ?SI_MOD_L00
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?SI_MOD_L00
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 0117 - 012D
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?SI_MOD_L00             0117            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?UI_DIV_L00
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 012E - 0150
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?UI_DIV_L00             012E            jrtp99
+                                                   ?SI_DIV_L00
+                                                   ?UI_MOD_L00
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?UI_MOD_L00
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 0151 - 0159
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?UI_MOD_L00             0151            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?L_MUL_L01
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 015A - 01BC
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?L_MUL_L01              015A            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?UL_DIV_L01
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 01BD - 0223
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?UL_MOD_L01             0217            Not referred to
+           ?UL_DIV_L01             01BD            jrtp99
+           ?MOVNT_L01              021A            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?L_ADD_L01
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 0224 - 0233
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?L_ADD_L01              0224            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?UL_SHR_L01
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 0234 - 024A
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?UL_SHR_L01             0234            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?S_SWITCH_L05
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 024B - 02AB
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?SL_SWITCH_L05          024B            Not referred to
+           ?S_SWITCH_L05           026B            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?VC_SWITCH_L05
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 02AC - 02D1
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?VC_SWITCH_L05          02AC            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?I_ASG_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 02D2 - 02FD
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?I_ASG_L17              02D7            jrtp99
+           ?I_ASG_OF_L17           02D2            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?L_ASG_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 02FE - 0331
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?L_ASG_L17              0303            jrtp99
+           ?L_ASG_OF_L17           02FE            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?C_ST_PTR_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 0332 - 034C
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?C_ST_PTR_L17           0337            jrtp99
+           ?C_ST_PTR_OF_L17        0332            Not referred to
+           ?A_ST_PTR_L17           0338            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?I_ST_PTR_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 034D - 0374
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?I_ST_PTR_L17           0352            ?I_ASG_L17
+           ?I_ST_PTR_OF_L17        034D            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?L_ST_PTR_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 0375 - 03B2
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?L_ST_PTR_L17           037A            ?L_ASG_L17
+           ?L_ST_PTR_OF_L17        0375            Not referred to
+           ?L_ST_IDATA_L17         037F            Not referred to
+           ?L_ST_XDATA_L17         0395            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?C_LD_PTR_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 03B3 - 03D9
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?C_LD_PTR_L17           03B8            jrtp99
+           ?C_LD_PTR_OF_L17        03B3            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?I_LD_PTR_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 03DA - 0412
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?I_LD_PTR_L17           03DF            jrtp99
+                                                   ?I_ASG_L17
+           ?I_LD_PTR_OF_L17        03DA            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?P_LD_PTR_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 0413 - 0457
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?P_LD_PTR_L17           0418            jrtp99
+           ?P_LD_PTR_OF_L17        0413            Not referred to
+           ?P_LD_IDATA_L17         041D            Not referred to
+           ?P_LD_XDATA_L17         042E            Not referred to
+           ?P_LD_CODE_L17          043F            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?L_LD_PTR_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 0458 - 04AC
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?L_LD_PTR_L17           045D            ?L_ASG_L17
+           ?L_LD_PTR_OF_L17        0458            Not referred to
+           ?L_LD_IDATA_L17         0462            Not referred to
+           ?L_LD_XDATA_L17         0479            Not referred to
+           ?L_LD_CODE_L17          048D            Not referred to
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?PA_IDX_L17
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 04AD - 04BE
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?PA_IDX_L17             04AD            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?VERSION_L17
+          ABSOLUTE ENTRIES        ADDRESS          REF BY MODULE
+           ==============         =======          =============
+           ?CL8051S_4_05_L17       C893            jrtp99
+
+    -------------------------------------------------------------------------
+  LIBRARY MODULE, NAME : ?RECURSION
+
+  SEGMENTS IN THE MODULE
+  ======================
+RCODE
+  Relative segment, address : 04BF - 0501
+           ENTRIES                ADDRESS          REF BY MODULE
+           ?ARG_MOVE               04BF            Not referred to
+
+                ****************************************
+                *                                      *
+                *        SEGMENTS IN DUMP ORDER        *
+                *                                      *
+                ****************************************
+
+ SEGMENT               START ADDRESS    END ADDRESS  TYPE  ORG  P/N  ALIGN
+ =======               =============    ===========  ====  ===  ===  =====
+BITVARS                    0024.0    -    0024.5      rel  stc  pos   0     
+C_ARGB                          Not applicable        dse  flt  pos   0     
+INTVEC                      0000     -     0025       com  stc  pos   0     
+C_ICALL                         Not applicable        dse  flt  pos   0     
+RCODE                       0026     -     0501       rel  flt  pos   0     
+CONST                       0502     -     05DD       rel  flt  pos   0     
+CCSTR                           Not applicable        rel  flt  pos   0     
+CSTR                        05DE     -     0CEF       rel  flt  pos   0     
+CODE                        0CF0     -     361C       rel  flt  pos   0     
+X_CDATA                         Not applicable        rel  flt  pos   0     
+D_CDATA                         Not applicable        rel  flt  pos   0     
+I_CDATA                         Not applicable        rel  flt  pos   0     
+C_RECFN                     361D     -     3634       rel  flt  pos   0     
+RF_XDATA                        Not applicable        dse  flt  pos   0     
+c1                              Not applicable        dse  flt  pos   0     
+D_IDATA                         Not applicable        rel  stc  pos   0     
+D_UDATA                         Not applicable        rel  flt  pos   0     
+C_ARGD                          Not applicable        dse  flt  pos   0     
+I_IDATA                         Not applicable        rel  flt  pos   0     
+I_UDATA                     0008     -     0023       rel  flt  pos   0     
+C_ARGI                      0025     -     008D       rel  flt  pos   0     
+CSTACK                      008E     -     00AB       rel  flt  pos   0     
+X_UDATA                         Not applicable        rel  stc  pos   0     
+X_IDATA                         Not applicable        rel  flt  pos   0     
+C_ARGX                          Not applicable        dse  flt  pos   0     
+ECSTR                           Not applicable        rel  flt  pos   0     
+
+                ****************************************
+                *                                      *
+                *        END OF CROSS REFERENCE        *
+                *                                      *
+                ****************************************
+
+Errors: none
+Warnings: 3
+
